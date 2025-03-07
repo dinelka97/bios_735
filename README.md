@@ -1,2 +1,3 @@
-# BIOS 735
-Project repository for BIOS 735 (UNC-CH)
+# BIOS 735 Project Repository
+
+derived data: simply concatenating features and target datasets to one datasaet.
