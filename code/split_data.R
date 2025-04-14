@@ -16,5 +16,5 @@ x <- x[complete.cases(x), ]
 
 dataset_split <- split_data(dataset = x)
 
-write.csv(x = dataset_split$train, file = "./data/derived/df_v1_TRAIN.csv")
-write.csv(x = dataset_split$test, file = "./data/derived/df_v1_TEST.csv")
+write.csv(x = dataset_split$train, file = "./data/derived/df_v1_TRAIN.csv", row.names = FALSE)
+write.csv(x = dataset_split$test, file = "./data/derived/df_v1_TEST.csv", row.names = FALSE)
