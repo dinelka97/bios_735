@@ -1,6 +1,7 @@
 rm(list = ls())
 
 library(ordinalForest)
+library(parallel)
 
 source("./code/fit_rf_func.R") # load function
 
@@ -15,14 +16,15 @@ y_multi_test <- x_test$num |> factor(levels = sort(unique(x_test$num)))
 y_binary_test <- as.numeric(x_test$num > 0) |> factor(levels = c(0, 1))
 x_test <- x_test[, -which(names(x_test) == "num")]
 
-
+# Metadata has descriptions of the variables
 meta <- read.csv(file = "./data/derived/var_info_upd.csv")
 
-
-# Fit ordinal model (takes a while)
+# Fit ordinal model
+# Takes a while
 res_multi <- fit_rf(x, y_multi)
 
 # Fit ordinal model but instead let's classify into the binary output (0, > 0)
+# Takes a while
 res_binary <- fit_rf(x, y_binary)
 
 save.image(file = "./results/randomforest_results.RData")
