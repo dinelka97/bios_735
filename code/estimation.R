@@ -4,6 +4,8 @@
     ## -- use it to run the proportional odds logistic regression model.
   ## -- a separate script is used to run the same for logistic regression.
 
+source("code/optim_v2.R")
+
 # Load libraries ----------------------------------------------------------
 
 library(tidyverse)
