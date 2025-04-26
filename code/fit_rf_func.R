@@ -1,13 +1,14 @@
 #' Fit an ordinal random forest model
 #'
-#' This function fits a random forest model for ordinala classification. It uses the `ordfor` function from the `ordinalForest` R package. It performs a grid search on combinations of the minimum node size and number of trees hyperparameters, using cross-validation and mean absolute error (MAE) to compare combinations. Finally, ,it fits and returns a model on the full dataset using the best parameter combination.
+#' This function fits a random forest model for ordinal classification. It uses the `ordfor` function from the `ordinalForest` R package. It performs a grid search on combinations of the minimum node size and number of trees hyperparameters, using cross-validation and mean absolute error (MAE) to compare combinations. Finally, it fits and returns a model on the full dataset using the best parameter combination.
 #'
 #' @param x A numeric matrix or data frame of predictors (samples x features).
 #' @param y A factor vector of class labels, with at least two ordered levels.
 #' @param ntree_grid A numeric vector for the number of trees to evaluate
-#'   in the grid search (default: `round(10^seq(1, 3, by = 0.5))`).
+#'   in the grid search (default: `c(10, 50, 100, 500, 1000)`).
 #' @param nodesize_grid A numeric vector for the minimum node size
-#'   to evaluate (default: `round(10^seq(1, 2, by = 0.25))`).
+#'   to evaluate (default: `c(2, 3, 4, 6, 8, 12, 16, 24, 32)`).
+#' @param nsets An integer specifying the number of score sets to use. Currently uses default for ordinalForest (default: `1000`).
 #' @param nfolds An integer specifying the number of cross-validation folds (default: `5`).
 #'
 #' @return A list with the following elements:
@@ -23,8 +24,9 @@
 #' @export
 #' 
 fit_rf <- function(x, y, 
-				   ntree_grid = round(10^seq(1, 3, by = 0.5)), 
-				   nodesize_grid = round(10^(seq(1, 2, by = 0.25))), 
+				   ntree_grid = c(10, 50, 100, 500, 1000), 
+				   nodesize_grid = c(2, 3, 4, 6, 8, 12, 16, 24, 32), 
+				   nsets = 1000, 
 				   nfolds = 5) {
 	if (nrow(x) != length(y)) {
 		stop("number of rows of x (samples) should equal length of y")
@@ -39,35 +41,38 @@ fit_rf <- function(x, y,
 	df <- cbind(x, y) |> as.data.frame()
 	names(df)[ncol(df)] <- "Class"
 	df$Class <- factor(df$Class, levels = sort(unique(df$Class)))
-
+	
 	df$foldid <- sample(1:nfolds, size = nrow(df), replace = TRUE)
 	
-	mae <- array(dim = c(length(ntree_grid), length(nodesize_grid), nfolds))
-	# Grid search
-	for (i_fold in 1:nfolds) {
-		message(paste("Fold", i_fold, "of", nfolds, "..."))
+	mae <- mclapply(X = 1:nfolds, FUN = function(i_fold) {
 		df_fold <- df[df$foldid != i_fold, ]
 		df_fold <- df_fold[, -ncol(df_fold)]
 		
 		df_test <- df[df$foldid == i_fold, ]
 		df_test <- df_test[, -ncol(df_test)]
 		
+		mae_fold <- array(dim = c(length(ntree_grid), length(nodesize_grid)))
 		for (i_ntree in seq_along(ntree_grid)) {
 			for (i_nodesize in seq_along(nodesize_grid)) {
-
+				
 				fit <- ordfor(depvar = "Class", 
-							  data = df_fold,
+							  data = df_fold, 
+							  nsets = nsets, 
 							  perffunction = "probability", 
 							  ntreeperdiv = ntree_grid[i_ntree], 
-							  ntreefinal = ntree_grid[i_ntree], 
+							  ntreefinal = 50 * ntree_grid[i_ntree], 
 							  min.node.size = nodesize_grid[i_nodesize])
 				
 				pred <- predict(fit, newdata = df_test)
-				mae[i_ntree, i_nodesize, i_fold] <- mean(abs(as.numeric(pred$ypred) - as.numeric(df_test$Class)))
+				mae_fold[i_ntree, i_nodesize] <- mean(abs(as.numeric(pred$ypred) - as.numeric(df_test$Class)))
 				
 			}
 		}
-	}
+		
+		return(mae_fold)
+	})
+	
+	mae <- simplify2array(mae)
 	
 	mean_mae <- apply(X = mae, MARGIN = c(1, 2), FUN = mean)
 	
@@ -77,7 +82,7 @@ fit_rf <- function(x, y,
 	if (sum(mean_mae == min(mean_mae)) > 1) {
 		best_ntree_nodesize <- best_ntree_nodesize[order(best_ntree_nodesize[, 1], best_ntree_nodesize[, 2]), ][1, ]
 	}
-
+	
 	message("Fitting final model...")
 	fit <- ordfor(depvar = "Class",
 				  data = df[, -which(names(df) == "foldid")],
