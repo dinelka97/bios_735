@@ -54,9 +54,25 @@ glm_v2 <- function(formula, df, method){
   covariates = as.character(formula)[3]
   covariates = strsplit(covariates, "\\s*\\+\\s*")[[1]]
   
+  ## subset df to only the response and the covariates
+  df %<>% dplyr::select(all_of(c(response, covariates)))
+  
+  ## if any factor variables are present, implement one-hot encoding
+  
+  factor_df = Filter(is.factor, df %>% dplyr::select(-all_of(response)))
+  names_factor = names(Filter(is.factor, df %>% dplyr::select(-all_of(response))))
+  
+  if(length(names_factor) > 0){
+    one_hot_df = model.matrix(~ ., data = factor_df)[,-1]
+    
+    numeric_df = Filter(Negate(is.factor), df)
+    df = cbind(numeric_df, one_hot_df, y_mat_num)
+  }
+
   ## convert the covariates to a matrix
-  x_mat = as.matrix(df %>% dplyr::select(all_of(covariates)), nrow = nrow(df))
+  x_mat = as.matrix(df %>% dplyr::select(-all_of(response)), nrow = nrow(df))
   n_covariates = ncol(x_mat)
+  names_covariates = colnames(x_mat)
   
   if(method == "polr"){
     ## extract the theta names (based on the categories in the data)
@@ -79,7 +95,7 @@ glm_v2 <- function(formula, df, method){
     ## -- first get our initial estimates
     
     params_init = c(beta_init, theta_init)
-    names(params_init) = c(covariates, theta_names)
+    names(params_init) = c(names_covariates, theta_names)
     
     ## -- now for the algorithm, we directly use BFGS
     
@@ -102,7 +118,7 @@ glm_v2 <- function(formula, df, method){
     rownames(fit) = NULL
     
     
-    return(list(beta = unlist(fit[covariates]), 
+    return(list(beta = unlist(fit[names_covariates]), 
                 theta = unlist(fit[theta_names]),
                 ll = unlist(fit["value"]),
                 time = unlist(fit["xtime"])))
@@ -117,7 +133,7 @@ glm_v2 <- function(formula, df, method){
     ## -- however, again as before, the user has autonomy to pick their own initialization. 
     
     beta_init = rep(0, n_covariates + 1) 
-    names(beta_init) = c("Intercept", covariates)
+    names(beta_init) = c("Intercept", names_covariates)
     
     ## -- using the above, we optimize our likelihood using the NR algorithm that has been handcoded and laid out in optim.R
     
@@ -152,12 +168,13 @@ df_heart <- na.omit(df_heart)
 df_heart %<>%
   dplyr::select(-...1) %>%
   mutate(y_mult = factor(num),
-         y_bin = factor(ifelse(num == "0", 0, 1))
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex, fbs, slope), as.factor)
   )
 
 
     ### -- testing it for proportional odds logistic regression
-formula = y_mult ~ age + fbs + sex + cp + chol + exang + thalach
+formula = y_mult ~ age + fbs + sex + cp + chol + exang + thalach + slope
 
       ## -- using glm_v2
 res_glm_v2 = glm_v2(formula, df = df_heart, method = "polr")
@@ -166,16 +183,18 @@ res_glm_v2 = glm_v2(formula, df = df_heart, method = "polr")
 res_polr = polr(formula, data = df_heart)
 
       ## -- are the coefficients the same?
-all((res_glm_v2$beta - res_polr$coefficients) < 1e-4)
+        ## -- sort results (just name a and b for the 2 sets of results)
+a = res_glm_v2$beta[sort(names(res_glm_v2$beta))]
+b = res_polr$coefficients[sort(names(res_polr$coefficients))]
+
+all(a - b < 1e-4) 
 
       ## -- is the final log-likelihood the same?
 unname(res_glm_v2$ll - logLik(res_polr) < 1e-4)
 
 
-
-
     ### -- testing it for logistic regression
-formula = y_bin ~ age + fbs + sex + cp + chol + exang + thalach
+formula = y_bin ~ age + fbs + sex + cp + chol + exang + thalach + slope
 
       ## -- using glm_v2
 res_glm_v2 = glm_v2(formula, df = df_heart, method = "lr")
@@ -184,7 +203,10 @@ res_glm_v2 = glm_v2(formula, df = df_heart, method = "lr")
 res_glm = glm(formula, data = df_heart, family = "binomial")
 
       ## -- are the coefficients the same?
-all((res_glm_v2$beta - res_glm$coefficients) < 1e-4)
+a = res_glm_v2$beta[c("Intercept", sort(setdiff(names(res_glm_v2$beta), "Intercept")))]
+b = res_glm$coefficients[sort(names(res_glm$coefficients))]
+
+all(a - b < 1e-4)
 
       ## -- is the final log-likelihood the same?
 unname(res_glm_v2$ll - logLik(res_glm) < 1e-4)
