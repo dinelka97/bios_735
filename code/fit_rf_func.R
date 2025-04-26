@@ -39,12 +39,15 @@ fit_rf <- function(x, y,
 		stop("y (class labels) should be a factor of 2 or more levels")
 	}
 	
+	# Create data.frame with formatting required by `ordfor`
 	df <- cbind(x, y) |> as.data.frame()
 	names(df)[ncol(df)] <- "Class"
 	df$Class <- factor(df$Class, levels = sort(unique(df$Class)))
 	
+	# Create folds
 	df$foldid <- sample(1:nfolds, size = nrow(df), replace = TRUE)
 	
+	# Run grid search + cross-validation in parallel
 	mae <- mclapply(X = 1:nfolds, FUN = function(i_fold) {
 		df_fold <- df[df$foldid != i_fold, ]
 		df_fold <- df_fold[, -ncol(df_fold)]
@@ -64,6 +67,7 @@ fit_rf <- function(x, y,
 							  ntreefinal = 50 * ntree_grid[i_ntree], 
 							  min.node.size = nodesize_grid[i_nodesize])
 				
+				# Evaluate combination on withheld set
 				pred <- predict(fit, newdata = df_test)
 				mae_fold[i_ntree, i_nodesize] <- mean(abs(as.numeric(pred$ypred) - as.numeric(df_test$Class)))
 				
@@ -75,6 +79,7 @@ fit_rf <- function(x, y,
 	
 	mae <- simplify2array(mae)
 	
+	# Calculate average MAE across the folds
 	mean_mae <- apply(X = mae, MARGIN = c(1, 2), FUN = mean)
 	
 	best_ntree_nodesize <- which(mean_mae == min(mean_mae), arr.ind = TRUE)
