@@ -21,6 +21,7 @@
 #' }
 #'
 #' @importFrom ordinalForest ordfor
+#' @importFrom parallel mclapply
 #' @export
 #' 
 fit_rf <- function(x, y, 
