@@ -150,7 +150,7 @@ hessian_logit <- function(beta_t, x, y){
   xb = x %*% beta_t
   pi = exp(xb) / (1 + exp(xb))
   
-  W = diag(c(1-pi)*c(pi), nrow =n)
+  W = diag(c(1-pi)*c(pi), nrow = nrow(x))
   
   hessian = matrix(data = t(x) %*% W %*% x, nrow = length(beta_t), ncol = length(beta_t))
   
@@ -170,7 +170,7 @@ h_t_lr <- function(beta_t, x, y){
   
   hessian = hessian_logit(beta_t, x, y)
   
-  return(inverse(hessian) %*% 
+  return(solve(hessian) %*% 
            score)
 }
 
