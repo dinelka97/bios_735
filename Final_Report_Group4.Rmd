@@ -1,0 +1,45 @@
+---
+title: "Final Report - At the Heart of the Matter"
+output: pdf_document
+---
+
+Instructions: 
+
+Summarize results in Rmarkdown document, submitted separately from the R package. Aim for Introduction to the dataset and the question, a Methods section with any important pre-processing etc., three sections of Results (which may also contain some method details), and Discussion about interpretation or possible future directions.
+
+R package and Rmd details:
+
+R package and Rmd file should be runnable by instructors (unless data has privacy restrictions, in which case we can arrange an exception). Analyses are contained in Rmd file itself and should not reside in the R package.  The R package will be turned in separately as part of your group repository, and your Rmd file should utilize the R package. Your Rmd should start by loading your package. You can point out where to download data, you don’t necessarily need to contain in a data/ directory in the package, especially if it very large. The R package should have man pages for any functions that are exported. The R package should pass build/check as shown in class (ask if you have questions about this).
+
+```{r}
+# load R package
+
+```
+
+# Introduction
+Clear background on problem to be addressed given
+Question(s) to be explored, discussed, and learned
+Brief description of data/characteristics, how it relates to addressing question(s)
+
+# Methods
+Explanation of key data preprocessing/wrangling steps (if any) + rationale
+Clear description of Module 2 likelihood based methods used, with the following
+	Likelihood/objective function
+	Estimation procedure/hypothesis testing approach (if relevant)
+	Motivation for use and justification, assumptions
+Discussion of Module 3 machine learning method used
+	Justification for use
+	Discussion of tuning parameter/hyper parameter selection strategy
+Metrics for performance comparison between proposed models 
+All specialized methods should leverage R package (should be loaded first)
+	Functions used from package should be briefly described
+	
+# Results
+Clear Figures/tables describing and summarizing key outcomes/variables
+Clear Figures/table illustrating results that directly addresses question(s)
+Proper and clear descriptions of results based on figures and tables
+Code/output is fine in document, but excessive and repetitive code/output should be avoided
+
+# Discussion/Conclusion
+Summarization of main points, conclusions based in results
+Discussion of limitations if any
