@@ -1,8 +1,7 @@
 # Introduction ------------------------------------------------------------
 
   ## -- this script serves the purpose of defining the functions that are to be included within our package so that a user can -
-    ## -- use it to run the proportional odds logistic regression model.
-  ## -- a separate script is used to run the same for logistic regression.
+    ## -- use it to run both, a proportional odds logistic regression model and a logistc regression model.
 
 source("code/optim_v2.R")
 
