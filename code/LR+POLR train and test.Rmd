@@ -1,0 +1,89 @@
+---
+title: "Logistic Regression Model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+remove(list = ls())
+library(car)
+library(pROC)
+```
+# run estimation.R first
+# load the proproceesed data
+```{r}
+train <- read.csv("../data/derived/df_v1_TRAIN.csv")
+test <- read.csv("../data/derived/df_v1_TEST.csv")
+## build the train dataset
+train %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex, fbs, slope), as.factor)
+  )
+## build the test dataset
+test %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex, fbs, slope), as.factor)
+  )
+
+```
+
+# Select out predictors and outcomes for training and testing
+```{r}
+test_x <- test
+test_x$fbs1 <- ifelse(test$fbs == 1, 1, 0)
+test_x$sex1 <- ifelse(test$sex == 1, 1, 0)
+test_x$slope2 <- ifelse(test$slope == 2, 1, 0)
+test_x$slope3 <- ifelse(test$slope == 3, 1, 0)
+selected_var <- c("age", "cp", "chol", "exang", "thalach","fbs1", "sex1", "slope2","slope3")
+test_x <- test_x[,selected_var]
+test_x <- as.matrix(test_x)  ## force it to numeric matrix
+storage.mode(test_x) <- "numeric"
+## LR
+lr_test_x <- cbind(Intercept = 1, test_x)
+test_y <- test[,ncol(test)]
+## POLR
+polr_test_x <- test_x
+polr_test_y <- test[,(ncol(test)-1)]
+```
+
+# LR: use the function in estimation on train and test data
+```{r}
+# source("../code/estimation.R")
+lr_formula = y_bin ~ age + fbs + sex + cp + chol + exang + thalach + slope
+lr_train = glm_v2(lr_formula, df = train, method = "lr")
+beta_hat <- lr_train$beta
+
+## predict probabilities
+eta_test <- lr_test_x %*% beta_hat
+prob_test <- plogis(eta_test)  # apply inverse logit
+## evaluate performance
+roc_obj <- roc(test_y, as.numeric(prob_test))
+auc_value <- auc(roc_obj)
+print(auc_value)
+```
+
+# POLR: use the function in estimation on train and test data
+```{r}
+polr_formula = y_mult ~ age + fbs + sex + cp + chol + exang + thalach + slope
+polr_train = glm_v2(polr_formula, df = train, method = "polr")
+polr_eta_test <- polr_test_x %*% polr_train$beta
+theta <- polr_train$theta
+prob_matrix <- sapply(theta, function(th) plogis(th - polr_eta_test))
+# Probabilities for each class
+prob_class1 <- prob_matrix[,1]
+prob_class2 <- prob_matrix[,2] - prob_matrix[,1]
+prob_class3 <- prob_matrix[,3] - prob_matrix[,2]
+prob_class4 <- prob_matrix[,4] - prob_matrix[,3]
+prob_class5 <- 1 - prob_matrix[,4]
+probs_all <- cbind(prob_class1, prob_class2, prob_class3, prob_class4, prob_class5)
+predicted_class <- max.col(probs_all)
+## evaluate performance
+# --ordinal outcome
+mean(predicted_class == as.numeric(polr_test_y)) ## accuracy
+# --combine into binary
+# convert_bin <- ifelse()
+```
