@@ -1,0 +1,116 @@
+---
+title: "Logistic Regression Model"
+author: "Yajie He"
+date: "2025-04-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+remove(list = ls())
+library(car)
+library(pROC)
+```
+
+# load the proproceesed data
+```{r}
+train <- read.csv("../data/derived/df_v1_TRAIN.csv")
+test <- read.csv("../data/derived/df_v1_TEST.csv")
+## reclassify the variable "num" into binary
+train$heart <- ifelse(train$num == 0, 0, 1)
+test$heart <- ifelse(test$num == 0, 0, 1)
+## select out predictors and outcomes for training and testing
+train_x <- train[,c(2:(ncol(train)-2))] 
+train_y <- train[,ncol(train)]
+test_x <- test[,c(2:(ncol(test)-2))]
+test_y <- test[,ncol(test)] 
+# Make sure X is a numeric matrix
+train_x <- as.matrix(train_x)
+train_x <- apply(train_x, 2, as.numeric)
+test_x <- as.matrix(test_x)
+test_x <- apply(test_x, 2, as.numeric)
+# Make sure Y is numeric vector or matrix
+train_y <- as.numeric(train_y)
+test_y <- as.numeric(test_y)
+```
+
+# check the assumptions
+```{r}
+## multicollinearity among variables will lead to the Hessian singular
+train_df <- as.data.frame(train_x)
+train_df$y <- train_y 
+lm_fit <- lm(y ~ . , data = train_df) 
+vif_values <- vif(lm_fit)
+print(vif_values)
+## all vif<5, no multicollinearity
+```
+
+# Logistic regression using Newton-Raphson
+```{r}
+logistic_nr <- function(X, y, tol = 1e-8, max_iter = 100) {
+  # Add intercept if not already included
+  if (!all(X[,1] == 1)) {
+    X <- cbind(1, X)
+  }
+  
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  beta <- rep(0, p)  # Initialize beta
+  
+  for (iter in 1:max_iter) {
+    eta <- X %*% beta               # Linear predictor
+    p_hat <- 1 / (1 + exp(-eta))     # Predicted probabilities
+    
+    # Gradient (Score vector)
+    gradient <- t(X) %*% (y - p_hat)
+    
+    # Hessian (Second derivative matrix)
+    W <- diag(as.vector(p_hat * (1 - p_hat)), n, n)
+    hessian <- -t(X) %*% W %*% X
+    
+    # Update rule
+    delta <- solve(hessian, gradient)  # Newton-Raphson step
+    beta_new <- beta - delta
+    
+    # Check convergence
+    if (sqrt(sum((beta_new - beta)^2)) < tol) {
+      cat("Converged in", iter, "iterations\n")
+      break
+    }
+    
+    beta <- beta_new
+  }
+  
+  list(coefficients = beta, iterations = iter)
+}
+
+```
+
+# build the model on train set
+```{r}
+set.seed(123)
+n <- 200
+
+beta_true <- rep(0, ncol(train_x))
+log_odds <- train_x %*% beta_true
+p <- 1 / (1 + exp(-log_odds))
+
+fit <- logistic_nr(train_x, train_y)
+beta_hat <- fit$coefficients
+print(beta_hat)
+```
+
+```{r}
+## include intercept
+test_x <- cbind(Intercept = 1, test_x)  
+## predict probabilities
+eta_test <- test_x %*% beta_hat
+prob_test <- plogis(eta_test)  # apply inverse logit
+## calculate AUC
+roc_obj <- roc(test_y, as.numeric(prob_test))
+auc_value <- auc(roc_obj)
+print(auc_value)
+
+```
+
