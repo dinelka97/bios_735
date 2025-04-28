@@ -22,14 +22,14 @@ train %<>%
   dplyr::select(-X) %>%
   mutate(y_mult = factor(num),
          y_bin = factor(ifelse(num == "0", 0, 1)),
-         across(c(sex, fbs, slope), as.factor)
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
   )
 ## build the test dataset
 test %<>%
   dplyr::select(-X) %>%
   mutate(y_mult = factor(num),
          y_bin = factor(ifelse(num == "0", 0, 1)),
-         across(c(sex, fbs, slope), as.factor)
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
   )
 
 ```
@@ -39,7 +39,7 @@ test %<>%
 ```{r}
 # ********source("../code/estimation.R")*********************
 # can't directly use source(), so need manually run this code file
-lr_formula = y_bin ~ age + fbs + sex + cp + chol + exang + thalach + slope
+lr_formula = y_bin ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
 lr_fit = glm_v2(lr_formula, df = train, method = "lr")
 ## train matrix
 lr_train_x <- model.matrix(lr_formula, data = train)
@@ -91,7 +91,7 @@ Heatmap(lr_conf_test_prop,
         })
 
 ## evaluate performance
-roc_obj <- roc(lr_test_y, as.numeric(lr_prob_test))
+roc_obj <- roc(lr_test_y, as.numeric(lr_pred_test))
 auc_value <- auc(roc_obj)
 print(auc_value)
 ```
@@ -99,7 +99,7 @@ print(auc_value)
 # POLR: use the function in estimation on train and test data
 ## heatmap for training
 ```{r}
-polr_formula = y_mult ~ age + fbs + sex + cp + chol + exang + thalach + slope
+polr_formula = y_mult ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
 polr_fit = glm_v2(polr_formula, df = train, method = "polr")
 ## =================plot heatmap for training====================
 ## Create X_train
@@ -165,6 +165,8 @@ Heatmap(polr_test_table_prop,
         })
 
 ```
+max(polr_eta_test) < polr_fit$theta, theta34 is too high, so there's no class4
+
 ## heatmaps for binary training
 ```{r}
 polr_train_y_numeric <- as.numeric(as.character(polr_train_y))
