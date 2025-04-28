@@ -1,0 +1,204 @@
+---
+title: "prop_odds_masspkg"
+author: "Annika Cleven"
+date: "2025-04-21"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+
+```{r}
+df_v1 <- read_csv("heart_disease/df_v1.csv")
+df_v1_TEST <- read_csv("heart_disease/df_v1_TEST.csv")
+df_v1_TRAIN <- read_csv("heart_disease/df_v1_TRAIN.csv")
+
+df_v1_TRAIN %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+## build the test dataset
+df_v1_TEST %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+```
+
+
+## Using PCKG
+
+
+```{r}
+library(MASS)
+
+pop_mod <- polr(y_mult ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal , data = df_v1_TRAIN, Hess = T)
+
+summary(pop_mod)
+```
+
+```{r}
+# Coefficients and standard errors
+coefs <- coef(summary(pop_mod))
+
+# Odds ratios
+(OR <- exp(coefs[, "Value"]))
+
+# 95% Confidence Intervals
+(lower_CI <- exp(coefs[, "Value"] - 1.96 * coefs[, "Std. Error"]))
+(upper_CI <- exp(coefs[, "Value"] + 1.96 * coefs[, "Std. Error"]))
+
+# Combine into a table
+OR_table <- cbind(OR, lower_CI, upper_CI)
+colnames(OR_table) <- c("Odds Ratio", "2.5 %", "97.5 %")
+round(OR_table, 3)
+
+
+#prediction
+probs <- predict(pop_mod, newdata = df_v1_TEST, type = "probs")
+predicted_class <- apply(probs, 1, which.max) - 1  # assuming outcome levels are 0:4
+
+library(ggplot2)
+# Conf mat
+
+# Ensure both are factors with the full set of levels
+actual <- factor(df_v1_TEST$num, levels = 0:4)
+predicted <- factor(predicted_class, levels = 0:4)
+
+# Create full confusion matrix using table()
+conf_mat <- as.data.frame(table(Predicted = predicted, Actual = actual))
+
+# regular heat map
+ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 4) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +  #
+  labs(title = "Confusion Matrix",
+       x = "Actual Class", y = "Predicted Class") +
+  theme_minimal()
+
+ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 4, color = "black") +
+  scale_fill_gradient(low = "lightblue", high = "navy") +  # Shades based on frequency
+  labs(title = "Confusion Matrix ",
+       x = "Actual Class", y = "Predicted Class",
+       fill = "Frequency") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+
+# based on error distance (darker = worse)
+conf_mat$Distance <- as.numeric(as.character(conf_mat$Predicted)) -
+                        as.numeric(as.character(conf_mat$Actual))
+
+conf_mat %>%
+  mutate(Distance =  as.numeric(Predicted) - as.numeric(Actual)) %>%
+  group_by(Distance) %>%
+  summarise(Total = sum(Freq)) %>%
+  ggplot(aes(x = factor(Distance), y = Total, fill = factor(Distance))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Misclassification Distance",
+       subtitle = "Positive means prediction was higher severity than actual, Negative is lower severity",
+       x = "Misclassification Distance", y = "Frequency",
+       fill = "Distance for actual category")
+```
+
+# most predictive variables
+
+```{r}
+no_na <- na.omit(df_v1)
+
+#pop_mod <- polr(y_mult ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal , data = df_v1_TRAIN, Hess = T)
+stepwise_mod <- stepAIC(pop_mod, direction = "both", trace = FALSE)
+summary(stepwise_mod) 
+
+# Coefficients and standard errors
+coefs <- coef(summary(stepwise_mod ))
+
+# Odds ratios
+(OR <- exp(coefs[, "Value"]))
+
+# 95% Confidence Intervals
+(lower_CI <- exp(coefs[, "Value"] - 1.96 * coefs[, "Std. Error"]))
+(upper_CI <- exp(coefs[, "Value"] + 1.96 * coefs[, "Std. Error"]))
+
+# Combine into a table
+OR_table <- cbind(OR, lower_CI, upper_CI)
+colnames(OR_table) <- c("Odds Ratio", "2.5 %", "97.5 %")
+round(OR_table, 3)
+
+
+#prediction
+probs <- predict(stepwise_mod, newdata = df_v1_TEST, type = "probs")
+predicted_class <- apply(probs, 1, which.max) - 1  # assuming outcome levels are 0:4
+
+library(ggplot2)
+# Conf mat
+
+# Ensure both are factors with the full set of levels
+actual <- factor(df_v1_TEST$num, levels = 0:4)
+predicted <- factor(predicted_class, levels = 0:4)
+
+# Create full confusion matrix using table()
+conf_mat <- as.data.frame(table(Predicted = predicted, Actual = actual))
+
+conf_mat <- conf_mat %>%
+  group_by(Actual) %>%
+  mutate(Prop = Freq / sum(Freq))
+
+ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Prop)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Prop, 2)), size = 4) +
+  #geom_text(aes(label = scales::percent(Prop, accuracy = 0.1)), size = 4) +
+  scale_fill_gradient(low = "white", high = "red") + 
+  labs(title = "Confusion Matrix:Testing",
+       x = "Actual Class", y = "Predicted Class") +
+  theme_minimal()
+
+# # regular heat map
+# ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Freq)) +
+#   geom_tile(color = "white") +
+#   geom_text(aes(label = Freq), size = 4) +
+#   scale_fill_gradient(low = "lightblue", high = "darkblue") + 
+#   labs(title = "Confusion Matrix",
+#        x = "Actual Class", y = "Predicted Class") +
+#   theme_minimal()
+# 
+# ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Freq)) +
+#   geom_tile(color = "white") +
+#   geom_text(aes(label = Freq), size = 4, color = "black") +
+#   scale_fill_gradient(low = "lightblue", high = "navy") +  # Shades based on frequency
+#   labs(title = "Confusion Matrix ",
+#        x = "Actual Class", y = "Predicted Class",
+#        fill = "Frequency") +
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+
+# based on error distance (darker = worse)
+conf_mat$Distance <- as.numeric(as.character(conf_mat$Predicted)) -
+                        as.numeric(as.character(conf_mat$Actual))
+
+conf_mat %>%
+  group_by(Distance) %>%
+  summarise(Total = sum(Freq)) %>%
+  ggplot(aes(x = factor(Distance), y = Total, fill = factor(Distance))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Misclassification Distance",
+       subtitle = "Positive means prediction was higher severity than actual, Negative is lower severity",
+       x = "Misclassification Distance", y = "Frequency",
+       fill = "Distance for actual category")
+```
+
+
+
+
+
+
