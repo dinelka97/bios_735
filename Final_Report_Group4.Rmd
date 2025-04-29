@@ -13,7 +13,7 @@ R package and Rmd file should be runnable by instructors (unless data has privac
 
 ```{r}
 # load R package
-
+load_all("heaRt")
 ```
 
 # Introduction
@@ -33,12 +33,107 @@ Discussion of Module 3 machine learning method used
 Metrics for performance comparison between proposed models 
 All specialized methods should leverage R package (should be loaded first)
 	Functions used from package should be briefly described
-	
+## Data Preprocessing
+For categorical variables, we applied one-hot encoding to convert each category into a separate binary indicator variable. After this transformation, the full model included a total of 20 predictor variables. To address potential overfitting and improve model parsimony, we employed stepwise selection based on the Akaike Information Criterion (AIC). This approach iteratively added or removed predictors to identify a subset of variables that provided the best balance between model fit and complexity, ultimately selecting a more streamlined and interpretable model for subsequent analysis.
+## Logistic Regression Model
+Logistic regression is a widely used statistical model for predicting a binary outcome based on a set of predictor variables. The model assumes that the log-odds of the probability of the outcome is a linear function of the predictors. Specifically, if $Y$ is a binary outcome taking values in $ \{0,1\} $ and $ \mathbf{x} $ is a vector of covariates, then the logistic regression model is given by:
+$$
+\log\left( \frac{\Pr(Y=1|\mathbf{x})}{\Pr(Y=0|\mathbf{x})} \right) = \mathbf{x}^\top \boldsymbol\beta
+$$
+where $ \boldsymbol\beta $ is the vector of regression coefficients to be estimated. The corresponding probability model is:
+$$
+\Pr(Y=1|\mathbf{x}) = \frac{1}{1+\exp(-\mathbf{x}^\top \boldsymbol\beta)}
+$$
+
+To estimate the coefficients $ \boldsymbol\beta $, maximum likelihood estimation is employed. The likelihood function for a sample of size $n$ is:
+$$
+L(\boldsymbol\beta) = \prod_{i=1}^n \left( \frac{1}{1+\exp(-\mathbf{x}_i^\top \boldsymbol\beta)} \right)^{y_i} \left( \frac{\exp(-\mathbf{x}_i^\top \boldsymbol\beta)}{1+\exp(-\mathbf{x}_i^\top \boldsymbol\beta)} \right)^{1-y_i}
+$$
+and the log-likelihood function is:
+$$
+\ell(\boldsymbol\beta) = \sum_{i=1}^n \left( y_i \mathbf{x}_i^\top \boldsymbol\beta - \log\left(1+\exp(\mathbf{x}_i^\top \boldsymbol\beta)\right) \right)
+$$
+
+Because there is no closed-form solution for $ \boldsymbol\beta $ that maximizes the log-likelihood, iterative numerical methods must be used. One of the most common algorithms for this purpose is the Newton-Raphson method.
+
+The Newton-Raphson method is a second-order optimization technique that updates the parameter estimates iteratively. At each iteration $k$, given a current estimate $ \boldsymbol\beta^{(k)} $, the next estimate $ \boldsymbol\beta^{(k+1)} $ is obtained by:
+$$
+\boldsymbol\beta^{(k+1)} = \boldsymbol\beta^{(k)} - \left( \nabla^2 \ell(\boldsymbol\beta^{(k)}) \right)^{-1} \nabla \ell(\boldsymbol\beta^{(k)})
+$$
+where $ \nabla \ell(\boldsymbol\beta^{(k)}) $ is the gradient (score function) and $ \nabla^2 \ell(\boldsymbol\beta^{(k)}) $ is the Hessian matrix (second derivative of the log-likelihood).
+
+In logistic regression, the gradient and Hessian have specific forms. The gradient is:
+$$
+\nabla \ell(\boldsymbol\beta) = \sum_{i=1}^n (y_i - \pi_i) \mathbf{x}_i
+$$
+where $ \pi_i = \Pr(Y=1|\mathbf{x}_i) $, and the Hessian is:
+$$
+\nabla^2 \ell(\boldsymbol\beta) = -\sum_{i=1}^n \pi_i (1-\pi_i) \mathbf{x}_i \mathbf{x}_i^\top
+$$
+
+Thus, each Newton-Raphson update involves solving a linear system based on the weighted sum of the covariates. The iterations continue until convergence, usually when the change in $ \boldsymbol\beta $ is smaller than a pre-specified tolerance.
+
+In our model, we set the initial $\boldsymbol\beta$ as 0, tolerance as $10^{-3}$ and iterative times as $10^3$.
+
 # Results
 Clear Figures/tables describing and summarizing key outcomes/variables
 Clear Figures/table illustrating results that directly addresses question(s)
 Proper and clear descriptions of results based on figures and tables
 Code/output is fine in document, but excessive and repetitive code/output should be avoided
+## Logistic Regression Model
+
+This code output presents the variables after stepwise AIC selection, and their estimated coefficients from the logistic regression model with Newton Raphson method. It shows major vessels involved was strongly associated with the outcome, especially when two vessels were involved (ca2, coefficient = 3.183). The other major contribution to heart disease is being male (Sex = 1), which increased the log-odds by 1.398.
+
+```{r hidden-code, echo=FALSE}
+train <- read.csv("data/derived/df_v1_TRAIN.csv")
+test <- read.csv("data/derived/df_v1_TEST.csv")
+## build the train dataset
+train %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+## build the test dataset
+test %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+
+```
+
+```{r}
+# Stepwise AIC
+lr_formula_full = y_bin ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
+pop_lr_fit = glm(lr_formula_full, data = train, family = binomial())
+stepwise_mod <- stepAIC(pop_lr_fit, direction = "both", trace = FALSE)
+summary(stepwise_mod)
+# Logistic model + Newton Raphson
+lr_formula = y_bin ~ sex+cp+trestbps+thalach+oldpeak+slope+ca+thal
+lr_fit = glm_v2(lr_formula, df = train, method = "lr")
+## train matrix
+lr_train_x <- model.matrix(lr_formula, data = train)
+colnames(lr_train_x)[colnames(lr_train_x) == "(Intercept)"] <- "Intercept"
+lr_train_x <- lr_train_x[, names(lr_fit$beta)]
+lr_train_y <- train[,ncol(train)]
+## predict probabilities
+lr_eta_train <- lr_train_x %*% lr_fit$beta
+lr_p_train <- 1 / (1 + exp(-lr_eta_train))
+lr_pred_train <- ifelse(lr_p_train >= 0.5, 1, 0) 
+## Confusion matrix
+lr_conf_train <- table("Prediction" = lr_pred_train, "True Label" = lr_train_y) |> as.matrix()
+## Normalize (row-wise proportion: prediction rows)
+lr_conf_train_prop <- t(apply(lr_conf_train, 1, function(i) i / colSums(lr_conf_train)))
+```
+
+The heatmaps below illustrate the model performance on both the training and testing datasets, evaluating how well the model generalizes to unseen data and identify any potential overfitting or underfitting issues. Consistency between the two heatmaps indicates stable model performance.
+
+```{r include-pngs-side-by-side, echo=FALSE, fig.show='hold', out.width='45%'}
+knitr::include_graphics("results/figures/lr_test_heatmap.png")
+knitr::include_graphics("results/figures/lr_train_heatmap.png")
+```
 
 # Discussion/Conclusion
 Summarization of main points, conclusions based in results
