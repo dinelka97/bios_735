@@ -1,5 +1,6 @@
 ---
 title: "Final Report - At the Heart of the Matter"
+subtitle: "Annika Cleven, Yajie He, Tyler Humpherys, Dinelka Nanayakkra, Matthew Sutcliffe"
 output: pdf_document
 ---
 
@@ -14,6 +15,7 @@ R package and Rmd file should be runnable by instructors (unless data has privac
 ```{r, include = F}
 library(devtools)
 library(knitr)
+library(kableExtra)
 library(tidyverse)
 library(dplyr)
 library(car)
@@ -43,9 +45,9 @@ Brief description of data/characteristics, how it relates to addressing question
 Heart disease is a leading cause of death in the United States, accounting for over 700,000 deaths each year and posing a significant healthcare burden [1]. Accurate and early detection of heart disease is essential for improving patient outcomes, with implications for treatment plans, medication strategies, and lifestyle modifications. Traditional diagnostic methods, such as stress testing and electrocardiography (ECG), provide detailed, valuable insights of possible signals for the presence of heart disease. Thus, integrating this data together can enhance heart disease identification. The objective of our project is to develop a data-driven approach to predict the presence or severity of heart disease.
 
 ## 1 (ii) Data
-To accomplish this objective, we will analyze a publicly available dataset collected by the Cleveland Clinic between 1981 and 1984. This dataset includes 303 patients with or without heart disease, and includes a variety of their demographic features (e.g. age and sex) and clinical features (e.g. resting blood pressure, serum cholesterol, chest pain, and response to exercise) on which to train a predictive model. Specifically, the heart disease outcome of interest is a categorical value with 0 being no heart disease and 1 to 4 being increasing heart disease severity. In our analysis we will use both the full outcome spectrum (0-4) and a simplified, binary outcome of 0 (no heart disease) and 1 (heart disease, any severity). The link to the dataset repository is found here: https://doi.org/10.24432/C52P4X. In addition to the age and sex demographic variables, the table below provides more information on the clinical variables available in the dataset.
+To accomplish this objective, we will analyze a publicly available dataset collected by the Cleveland Clinic between 1981 and 1984. This dataset includes 303 patients with or without heart disease, and includes a variety of their demographic features (e.g. age and sex) and clinical diagnostic features (e.g. resting blood pressure, serum cholesterol, chest pain, and response to exercise) on which to train a predictive model. Specifically, the heart disease outcome of interest is a categorical value with 0 being no heart disease and 1 to 4 being increasing heart disease severity. In our analysis we will use both the full outcome spectrum (0-4) and a simplified, binary outcome of 0 (no heart disease) and 1 (heart disease, any severity). The link to the dataset repository is found here: https://doi.org/10.24432/C52P4X. In addition to the age and sex demographic variables, the table below provides more information on the clinical variables available in the dataset.
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 var_table <- data.frame(
   Variable = c("cp", "trestbps", "chol", "fbs", "restecg", "thalach", 
                "exang", "oldpeak", "slope", "ca", "thal"),
@@ -63,17 +65,17 @@ var_table <- data.frame(
     "Thallium Stress Test Result"
   ),
   Type = c(
-    "Categorical", 
-    "Integer", 
-    "Integer", 
-    "Categorical", 
-    "Categorical", 
-    "Integer", 
-    "Categorical", 
-    "Integer", 
-    "Categorical", 
-    "Integer", 
-    "Categorical"
+    "Cat", 
+    "Int", 
+    "Int", 
+    "Cat", 
+    "Cat", 
+    "Int", 
+    "Cat", 
+    "Int", 
+    "Cat", 
+    "Int", 
+    "Cat"
   ),
   Explanation = c(
     "Typical angina, atypical angina, non-anginal pain, or asymptomatic",
@@ -91,8 +93,87 @@ var_table <- data.frame(
 )
 
 
-kable(var_table, caption = "Clinical variables available in the dataset.")
+# kable(var_table, caption = "Clinical variables available in the dataset.")
+kable(var_table, caption = "Clinical variables available in the dataset.") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), 
+                latex_options = c("scale_down", "hold_position")) %>%
+  column_spec(1, width = "1cm") %>%
+  column_spec(2, width = "3cm") %>%
+  column_spec(3, width = "1cm") %>%
+  column_spec(4, width = "6cm")
 ```
+
+A quick check for suspicious or possible mismeaured data values revealed a serum cholesterol value of 409 mg/dl, which is almost double what is considered high, as well as revealed a maximum heart rate during exercise of 71 beats per minute. It was also discovered (see below) that 6 data values were missing: two missing exercise thallium scintigraphic defect values and four missing number of major vessels appearing to contain calcium deposits values. Since our goal is prediction and the number of missing data was really small, then these patients were dropped from our analysis. 
+
+```{r, echo=FALSE}
+# load all data
+df <- read.csv("data/derived/df_v1.csv")
+
+# check for any missing data
+missing_data <- data.frame(
+  missing_count = colSums(is.na(df))
+)
+kable(missing_data, caption = "Number of missing data values by variable.")
+```
+
+After this we investigated several properties of our data. First we looked at the distributions of sex, heart disease outcome, and age. 
+
+```{r, echo=FALSE}
+all_summary <- data.frame()
+# keeps <- c("sex","cp","fbs","restecg","exang","slope","ca","thal","num")
+keeps <- c("sex","num")
+
+for(col in names(df[keeps])) {
+  # get table of counts with NAs included
+  counts <- table(df[[col]], useNA = "ifany")
+  
+  # calculate percentages
+  percentages <- prop.table(counts) * 100
+  
+  # create temporary data frame for this column
+  temp_df <- data.frame(
+    Column = rep(col, length(counts)),
+    Value = names(counts),
+    Count = as.numeric(counts),
+    Percentage = round(as.numeric(percentages), 2),
+    stringsAsFactors = FALSE
+  )
+  
+  # handle the case when values are NULL (which happens with factors)
+  if(is.null(temp_df$Value)) {
+    temp_df$Value <- as.character(1:length(counts))
+  }
+  
+  # add NA label for the NA row if present
+  if(any(is.na(temp_df$Value))) {
+    temp_df$Value[is.na(temp_df$Value)] <- "NA"
+  }
+  
+  # append to the main data frame
+  all_summary <- rbind(all_summary, temp_df)
+}
+kable(all_summary, caption = "Distributions of sex and heart disease outcome in the dataset.")
+```
+
+```{r, echo=FALSE}
+ggplot(data = df, aes(x = age)) +
+  geom_histogram(binwidth = 3, fill = "#2b2b2b", color = "white", alpha = 0.8) +
+  labs(title = "Age Distribution",
+       x = "Age",
+       y = "Count") +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(hjust = 0.5, size = 15))
+```
+
+From these we see that the distribution of ages is approximately normal centered around the upper 50s, about 68% of the dataset is male, and about 54% of the patients in our data do not have heart disease. Although there is a small number of patients in each disease severity category, it is important to note that when we dicotomoze the outcome we have a more balanced dataset. 
+
+The other property we investigated was the correlation between variables. 
+
+```{r, fig.show='hold', out.width='45%', echo = F, fig.cap='Figure: Correlation between variables.'}
+knitr::include_graphics("results/figures/correlation.png")
+```
+
+A few variables had mild correlation with each other. Most of these correlated variables are from ECG graph results (e.g. slope, wave depression). A check on multicollinearity with VIF was performed and nothing of concern was found. 
 
 # 2 Methods
 Explanation of key data preprocessing/wrangling steps (if any) + rationale
@@ -266,7 +347,7 @@ We used an ordinal random forest model to predict heart disease status based on 
 
 The model was implemented using the `ordinalForest` R package. This package works by assigning a numeric score to each class level. These scores are predicted using random forests and then mapped back to the class labels. This makes the model functionally similar to regression approaches, while still handling classification tasks with ordered outcomes.
 
-We pre-processed our dataset by formatting the predictors (x) and outcomes (y) according to the expectations of the `fit_rf` function from our package. We used both the original five-level outcome and a simplified binary outcome (0 = no heart disease, 1+ = heart disease of any level) to evaluate model performance under different class definitions. We split our data into a training set (80% of samples) and a test set (20% of samples) and ran all model fitting on the training data.
+We pre-processed our dataset by formatting the predictors (x) and outcomes (y) into the appropriate format. We used both the original five-level outcome and a simplified binary outcome (0 = no heart disease, 1+ = heart disease of any level) to evaluate model performance under different class definitions. We split our data into a training set (80% of samples) and a test set (20% of samples) and ran all model fitting on the training data.
 
 ### Hyperparameter tuning
 
@@ -325,7 +406,7 @@ lr_conf_train <- table("Prediction" = lr_pred_train, "True Label" = lr_train_y) 
 ## Normalize (row-wise proportion: prediction rows)
 lr_conf_train_prop <- t(apply(lr_conf_train, 1, function(i) i / colSums(lr_conf_train)))
 ## Calculate kappa
-lr_train_kappa <- cohen.kappa(lr_conf_train)
+lr_train_kappa <- psych::cohen.kappa(lr_conf_train)
 paste0("Weighted Cohen's Kappa for Training set is:", round(lr_train_kappa$weighted.kappa,2))
 
 # Testing set
@@ -343,7 +424,7 @@ lr_conf_test <- table("Prediction" = lr_pred_test, "True Label" = lr_test_y) |> 
 ## Normalize (row-wise proportion: prediction rows)
 lr_conf_test_prop <- t(apply(lr_conf_test, 1, function(i) i / colSums(lr_conf_test)))
 ## Calculate kappa
-lr_test_kappa <- cohen.kappa(lr_conf_test)
+lr_test_kappa <- psych::cohen.kappa(lr_conf_test)
 paste0("Weighted Cohen's Kappa for Testing set is:", round(lr_test_kappa$weighted.kappa,2))
 ```
 ```{r include-image, fig.cap="Caption for the image", out.width="50%"}
@@ -568,7 +649,11 @@ After evaluating our model we performed model selection by doing stepwise AIC mo
 #compare to use off the shelf for polr
 pop_mod <- polr(y_mult ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal , data = train, Hess = T)
 stepwise_mod <- stepAIC(pop_mod, direction = "both", trace = FALSE)
-#summary(stepwise_mod)
+#summary(stepwise_mod) # instead of this, see nice table below made from this
+```
+
+```{r, fig.show='hold', out.width='45%', echo = F, fig.cap='Figure: Stepwise Selection for proportional odds logit regression model'}
+knitr::include_graphics("results/figures/stepwise_polr_coefs.png")
 ```
 
 We can see that the model keeps most of the predictors, only dropping predictor variables for serum cholesterol, fasting blood sugar, and exercise induced angina presence.
@@ -817,12 +902,11 @@ barplot(sort(res_binary$fit$varimp),
 Summarization of main points, conclusions based in results
 Discussion of limitations if any
 
-## 4 (i) Sample Size Concerns and effect on Proportional Odds Model
-One reason for the proportional odds model is due to the limited sample size. At the higher heart severity levels like 3 and 4, the sample size within these groups was very small. This constrains the model's ability to learn the data in the training dataset and accurately predict participants into these higher categories. This also explains some of the model's bias towards 0, which was the largest disease severity group. Additionally, since the poor performance was also found in the model selected by AIC stepwise selection, we can contribute some of the errors of the model due to the imbalanced data. This is because even the best fitting model was not a great fit. In the future, we would advise our collaborators to aim for a larger sample size overall, but also within groups. We could also look into harmonizing the data across the many clinics investigating heart disease. 
+In the binary outcome case, the three models did moderately well. The Kappa values for logistic regression, proportional odds, and random forest were 0.64, 0.68, and 0.67, respectively. Thus the binary models had similar performance with proportional odds being slightly better in Kappa. The logistic regression model had the best recall (around 84%), which is an important metric clinically since a primary objective of the diagnosis task is to identify all (or nearly all) truely positive heart disease cases. In the multi-category outcome case, the proportional odds model (kappa of 0.42) and ordinal random forest (kappa of 0.58) struggled more. The ordinal random forest model successfully distinguished between individuals with and without heart disease when using a binary outcome, but failed to accurately predict multiple levels of disease severity. 
 
-## 4 (ii) Ordinal Random Forest
+These multi-category model limitations likely stems from a combination of class imbalance, a lack of differentiating features for disease severity, and the limited sample size. At the higher heart severity levels like 3 and 4, the sample size within these groups was very small. This constrains the model's ability to learn the data in the training dataset and accurately predict participants into these higher categories. This also explains some of the model's bias towards 0, which was the largest disease severity group. Additionally, since the poor performance was also found in the model selected by AIC stepwise selection, we can contribute some of the errors of the model due to the imbalanced data. This is because even the best fitting model was not a great fit. 
 
-The ordinal random forest model successfully distinguished between individuals with and without heart disease when using a binary outcome, but failed to accurately predict multiple levels of disease severity. This limitation likely stems from a combination of class imbalance and a lack of differentiating features for disease severity.
+In the future, we would advise our collaborators to aim for a larger sample size overall, but also within groups. We could also look into harmonizing the data across the many clinics investigating heart disease. 
 
 # References
 [1] Martin, SS., … American Heart Association Council on Epidemiology and Prevention Statistics Committee and Stroke Statistics Subcommittee (2024). 2024 Heart Disease and Stroke Statistics: A Report of US and Global Data From the American Heart Association. Circulation, 149(8), e347–e913. https://doi.org/10.1161/CIR.0000000000001209
