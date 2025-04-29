@@ -4,14 +4,6 @@ subtitle: "Annika Cleven, Yajie He, Tyler Humpherys, Dinelka Nanayakkra, Matthew
 output: pdf_document
 ---
 
-Instructions: 
-
-Summarize results in Rmarkdown document, submitted separately from the R package. Aim for Introduction to the dataset and the question, a Methods section with any important pre-processing etc., three sections of Results (which may also contain some method details), and Discussion about interpretation or possible future directions.
-
-R package and Rmd details:
-
-R package and Rmd file should be runnable by instructors (unless data has privacy restrictions, in which case we can arrange an exception). Analyses are contained in Rmd file itself and should not reside in the R package.  The R package will be turned in separately as part of your group repository, and your Rmd file should utilize the R package. Your Rmd should start by loading your package. You can point out where to download data, you don’t necessarily need to contain in a data/ directory in the package, especially if it very large. The R package should have man pages for any functions that are exported. The R package should pass build/check as shown in class (ask if you have questions about this).
-
 ```{r, include = F}
 library(devtools)
 library(knitr)
@@ -37,9 +29,6 @@ load_all("heaRt")
 ```
 
 # 1 Introduction
-Clear background on problem to be addressed given
-Question(s) to be explored, discussed, and learned
-Brief description of data/characteristics, how it relates to addressing question(s)
 
 ## 1 (i) Background
 Heart disease is a leading cause of death in the United States, accounting for over 700,000 deaths each year and posing a significant healthcare burden [1]. Accurate and early detection of heart disease is essential for improving patient outcomes, with implications for treatment plans, medication strategies, and lifestyle modifications. Traditional diagnostic methods, such as stress testing and electrocardiography (ECG), provide detailed, valuable insights of possible signals for the presence of heart disease. Thus, integrating this data together can enhance heart disease identification. The objective of our project is to develop a data-driven approach to predict the presence or severity of heart disease.
@@ -116,7 +105,7 @@ missing_data <- data.frame(
 kable(missing_data, caption = "Number of missing data values by variable.")
 ```
 
-After this we investigated several properties of our data. First we looked at the distributions of sex, heart disease outcome, and age. 
+After this we investigated several properties of our data. First we looked at the distributions of sex, heart disease outcome (num), and age. 
 
 ```{r, echo=FALSE}
 all_summary <- data.frame()
@@ -176,17 +165,6 @@ knitr::include_graphics("results/figures/correlation.png")
 A few variables had mild correlation with each other. Most of these correlated variables are from ECG graph results (e.g. slope, wave depression). A check on multicollinearity with VIF was performed and nothing of concern was found. 
 
 # 2 Methods
-Explanation of key data preprocessing/wrangling steps (if any) + rationale
-Clear description of Module 2 likelihood based methods used, with the following
-	Likelihood/objective function
-	Estimation procedure/hypothesis testing approach (if relevant)
-	Motivation for use and justification, assumptions
-Discussion of Module 3 machine learning method used
-	Justification for use
-	Discussion of tuning parameter/hyper parameter selection strategy
-Metrics for performance comparison between proposed models 
-All specialized methods should leverage R package (should be loaded first)
-	Functions used from package should be briefly described
 
 ## 2 (i) Data Preprocessing
 For categorical variables, we applied one-hot encoding to convert each category into a separate binary indicator variable. After this transformation, the full model included a total of 20 predictor variables. To address potential overfitting and improve model parsimony, we employed stepwise selection based on the Akaike Information Criterion (AIC). This approach iteratively added or removed predictors to identify a subset of variables that provided the best balance between model fit and complexity, ultimately selecting a more streamlined and interpretable model for subsequent analysis.
@@ -353,11 +331,10 @@ We pre-processed our dataset by formatting the predictors (x) and outcomes (y) i
 
 Hyperparameter tuning was conducted using 5-fold cross-validation to minimize the mean absolute error (MAE) between the predicted score and the true class label. We considered two of the hyperparameters for tuning: (1) the minimum node size, indicating the smallest number of observations allowed in a terminal node, and (2) the minimum number of decision trees trained. We tested combinations of minimum node size (ranging from 2 to 32) and minimum number of trees (ranging from 10 to 1000). The combination with the minimum average MAE across the 5-folds was selected for final model training using the entire training dataset.
 
+## 2 (v) R package
+We made an R package called "heaRt" that uses Newton Raphson and BFGS to fit and implement the logistic regression and proportional odds cumulative-logit models with only a single function called "glm_v2". To use this function from our package, a user simply specifies a model formula (e.g. Y ~ X1 + X2), a dataframe, and whether they would like to do logistic or proportional odds logistic regession. This function returns the estimated effects of the covariates, the probabilities between different groups (for POLR only), the log-likelihood value, and the time it took to fit. Note that random forest was not included in the R package because we are not implementing it from scratch. 
+
 # 3 Results
-Clear Figures/tables describing and summarizing key outcomes/variables
-Clear Figures/table illustrating results that directly addresses question(s)
-Proper and clear descriptions of results based on figures and tables
-Code/output is fine in document, but excessive and repetitive code/output should be avoided
 
 ## 3 (i) Logistic Regression Model
 
@@ -898,9 +875,9 @@ barplot(sort(res_binary$fit$varimp),
 		names.arg = meta$name_plot[match(x = names(sort(res_multi$fit$varimp)), table = meta$name)], xlab = "variable importance")
 ```
 
+From this figure we see that the number of major vessels found with calcium deposits, ST depression induced by exercise, chest pain type, and thalassemia type all had relatively high influence on the models predictions. 
+
 # 4 Discussion/Conclusion
-Summarization of main points, conclusions based in results
-Discussion of limitations if any
 
 In the binary outcome case, the three models did moderately well. The Kappa values for logistic regression, proportional odds, and random forest were 0.64, 0.68, and 0.67, respectively. Thus the binary models had similar performance with proportional odds being slightly better in Kappa. The logistic regression model had the best recall (around 84%), which is an important metric clinically since a primary objective of the diagnosis task is to identify all (or nearly all) truely positive heart disease cases. In the multi-category outcome case, the proportional odds model (kappa of 0.42) and ordinal random forest (kappa of 0.58) struggled more. The ordinal random forest model successfully distinguished between individuals with and without heart disease when using a binary outcome, but failed to accurately predict multiple levels of disease severity. 
 
