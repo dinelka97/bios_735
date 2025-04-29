@@ -141,6 +141,22 @@ probs <- predict(stepwise_mod, newdata = df_v1_TEST, type = "probs")
 predicted_class <- apply(probs, 1, which.max) - 1  # assuming outcome levels are 0:4
 
 library(ggplot2)
+
+polr_test_table <- table("prediction" = predicted_class, "true label" = df_v1_TEST$y_mult) |> as.matrix()
+## Normalize to proportions
+polr_test_table_prop <- t(apply(polr_test_table, 1, function(i) i / colSums(polr_test_table)))
+
+Heatmap(polr_test_table_prop , 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction", row_names_side = "left",
+        column_title = "True Label", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", polr_test_table_prop[i,j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+
 # Conf mat
 
 # Ensure both are factors with the full set of levels
@@ -162,6 +178,8 @@ ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Prop)) +
   labs(title = "Confusion Matrix:Testing",
        x = "Actual Class", y = "Predicted Class") +
   theme_minimal()
+
+
 
 # # regular heat map
 # ggplot(conf_mat, aes(x = Actual, y = Predicted, fill = Freq)) +
@@ -189,8 +207,8 @@ conf_mat$Distance <- as.numeric(as.character(conf_mat$Predicted)) -
 conf_mat %>%
   group_by(Distance) %>%
   summarise(Total = sum(Freq)) %>%
-  ggplot(aes(x = factor(Distance), y = Total, fill = factor(Distance))) +
-  geom_bar(stat = "identity") +
+  ggplot(aes(x = factor(Distance), y = Total)) +
+  geom_bar(stat = "identity", fill = "blue") +
   labs(title = "Misclassification Distance",
        subtitle = "Positive means prediction was higher severity than actual, Negative is lower severity",
        x = "Misclassification Distance", y = "Frequency",
