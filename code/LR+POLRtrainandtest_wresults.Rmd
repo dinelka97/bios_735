@@ -1,0 +1,250 @@
+---
+title: "Logistic Regression Model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+remove(list = ls())
+library(car)
+library(pROC)
+library(ComplexHeatmap)
+library(circlize)
+library(grid)
+```
+# run estimation.R first
+# load the proproceesed data
+```{r}
+train <- read.csv("../data/derived/df_v1_TRAIN.csv")
+test <- read.csv("../data/derived/df_v1_TEST.csv")
+## build the train dataset
+train %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+## build the test dataset
+test %<>%
+  dplyr::select(-X) %>%
+  mutate(y_mult = factor(num),
+         y_bin = factor(ifelse(num == "0", 0, 1)),
+         across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+  )
+
+```
+
+# LR: use the function in estimation on train and test data
+## heatmap for training
+```{r}
+# ********source("../code/estimation.R")*********************
+# can't directly use source(), so need manually run this code file
+lr_formula = y_bin ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
+lr_fit = glm_v2(lr_formula, df = train, method = "lr")
+## train matrix
+lr_train_x <- model.matrix(lr_formula, data = train)
+colnames(lr_train_x)[colnames(lr_train_x) == "(Intercept)"] <- "Intercept"
+lr_train_x <- lr_train_x[, names(lr_fit$beta)]
+lr_train_y <- train[,ncol(train)]
+## predict probabilities
+lr_eta_train <- lr_train_x %*% lr_fit$beta
+lr_p_train <- 1 / (1 + exp(-lr_eta_train))
+lr_pred_train <- ifelse(lr_p_train >= 0.5, 1, 0) 
+## Confusion matrix
+lr_conf_train <- table("Prediction" = lr_pred_train, "True Label" = lr_train_y) |> as.matrix()
+## Normalize (row-wise proportion: prediction rows)
+lr_conf_train_prop <- t(apply(lr_conf_train, 1, function(i) i / colSums(lr_conf_train)))
+Heatmap(lr_conf_train_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction", row_names_side = "left",
+        column_title = "True Label", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", lr_conf_train_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+```
+## heatmap for testing
+```{r}
+## test matrix
+lr_test_x <- model.matrix(lr_formula, data = test)
+colnames(lr_test_x)[colnames(lr_test_x) == "(Intercept)"] <- "Intercept"
+lr_test_x <- lr_test_x[, names(lr_fit$beta)]
+lr_test_y <- test[,ncol(test)]
+## predict probabilities
+lr_eta_test <- lr_test_x %*% lr_fit$beta
+lr_p_test <- 1 / (1 + exp(-lr_eta_test))
+lr_pred_test <- ifelse(lr_p_test >= 0.5, 1, 0) 
+## Confusion matrix
+lr_conf_test <- table("Prediction" = lr_pred_test, "True Label" = lr_test_y) |> as.matrix()
+## Normalize (row-wise proportion: prediction rows)
+lr_conf_test_prop <- t(apply(lr_conf_test, 1, function(i) i / colSums(lr_conf_test)))
+Heatmap(lr_conf_test_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction", row_names_side = "left",
+        column_title = "True Label", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", lr_conf_test_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+## evaluate performance
+roc_obj <- roc(lr_test_y, as.numeric(lr_pred_test))
+auc_value <- auc(roc_obj)
+print(auc_value)
+```
+
+# POLR: use the function in estimation on train and test data
+## heatmap for training
+```{r}
+polr_formula = y_mult ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
+polr_fit = glm_v2(polr_formula, df = train, method = "polr")
+## =================plot heatmap for training====================
+## Create X_train
+polr_train_x <- model.matrix(polr_formula, data = train)[, -1] 
+polr_train_x <- polr_train_x[, names(polr_fit$beta)] # Reorder columns
+## Linear predictor
+polr_eta_train <- polr_train_x %*% polr_fit$beta
+## Predict class
+n_class <- length(polr_fit$theta) + 1
+### No labels, get default levels 1,2,3,4,5
+polr_temp_pred_train <- cut(as.numeric(polr_eta_train),
+                 breaks = c(-Inf, polr_fit$theta, Inf),
+                 right = TRUE)  # gives levels 1,2,3,4,5
+### Manually subtract 1 to match 0–4
+polr_train_pred <- as.numeric(polr_temp_pred_train) - 1
+## True labels for training
+polr_train_y <- train$y_mult
+## Confusion matrix
+polr_train_table <- table("prediction" = polr_train_pred, "true label" = polr_train_y) |> as.matrix()
+## Normalize to proportions
+polr_train_table_prop <- t(apply(polr_train_table, 1, function(i) i / colSums(polr_train_table)))
+## Heatmap for training set
+Heatmap(polr_train_table_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction", row_names_side = "left",
+        column_title = "True Label", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", polr_train_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+```
+
+```{r}
+#missclassification distance
+as.data.frame(polr_train_table) %>%
+  mutate(Distance = as.numeric(prediction) - as.numeric(true.label)) %>%
+  group_by(Distance) %>%
+  summarise(Total = sum(Freq)) %>%
+  ggplot(aes(x = factor(Distance), y = Total)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Misclassification Distance with Training",
+       subtitle = "Positive means prediction was higher severity than actual, Negative is lower severity",
+       x = "Misclassification Distance", y = "Frequency",
+       fill = "Distance for actual category")
+
+#kappa & weighted kappa
+#kappa doesnt respect the severity of missclassification
+#use weighted misclassification
+cohen.kappa(cbind(train$y_mult, polr_train_pred))
+```
+
+
+## heatmap for testing
+```{r}
+## Create X_test
+polr_test_x <- model.matrix(polr_formula, data = test)[, -1] 
+polr_test_x <- polr_test_x[, names(polr_fit$beta)] # Reorder columns
+## Linear predictor
+polr_eta_test <- polr_test_x %*% polr_fit$beta
+### No labels, get default levels 1,2,3,4,5
+polr_temp_pred_test <- cut(as.numeric(polr_eta_test),
+                 breaks = c(-Inf, polr_fit$theta, Inf),
+                 right = TRUE)  # gives levels 1,2,3,4,5
+### Manually subtract 1 to match 0–4
+polr_test_pred <- as.numeric(polr_temp_pred_test) - 1
+## True labels for testing
+polr_test_y <- test$y_mult
+## Confusion matrix
+polr_test_table <- table("prediction" = polr_test_pred, "true label" = polr_test_y) |> as.matrix()
+## Normalize to proportions
+polr_test_table_prop <- t(apply(polr_test_table, 1, function(i) i / colSums(polr_test_table)))
+## Heatmap for testing set
+Heatmap(polr_test_table_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction", row_names_side = "left",
+        column_title = "True Label", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", polr_test_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+```
+max(polr_eta_test) < polr_fit$theta, theta34 is too high, so there's no class4
+
+
+```{r}
+#missclassification distance
+as.data.frame(polr_test_table) %>%
+  mutate(Distance = as.numeric(prediction) - as.numeric(true.label)) %>%
+  group_by(Distance) %>%
+  summarise(Total = sum(Freq)) %>%
+  ggplot(aes(x = factor(Distance), y = Total)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Misclassification Distance with Testing",
+       subtitle = "Positive means prediction was higher severity than actual, Negative is lower severity",
+       x = "Misclassification Distance", y = "Frequency",
+       fill = "Distance for actual category")
+
+#kappa & weighted kappa
+#kappa doesnt respect the severity of missclassification
+#use weighted misclassification
+cohen.kappa(cbind(test$y_mult, polr_test_pred))
+```
+
+## heatmaps for binary training
+```{r}
+polr_train_y_numeric <- as.numeric(as.character(polr_train_y))
+polr_train_pred_numeric <- as.numeric(as.character(polr_train_pred))
+polr_train_y_binary <- ifelse(polr_train_y_numeric > 0, 1, 0)
+polr_train_pred_binary <- ifelse(polr_train_pred_numeric > 0, 1, 0)
+polr_train_binary_table <- table("prediction" = polr_train_pred_binary, "true label" = polr_train_y_binary) |> as.matrix()
+polr_train_binary_table_prop <- t(apply(polr_train_binary_table, 1, function(i) i / colSums(polr_train_binary_table)))
+
+Heatmap(polr_train_binary_table_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction (Binary)", row_names_side = "left",
+        column_title = "True Label (Binary)", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", polr_train_binary_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+```
+## heatmaps for binary testing
+```{r}
+polr_test_y_numeric <- as.numeric(as.character(polr_test_y))
+polr_test_pred_numeric <- as.numeric(as.character(polr_test_pred))
+polr_test_y_binary <- ifelse(polr_test_y_numeric > 0, 1, 0)
+polr_test_pred_binary <- ifelse(polr_test_pred_numeric > 0, 1, 0)
+
+polr_test_binary_table <- table("prediction" = polr_test_pred_binary, "true label" = polr_test_y_binary) |> as.matrix()
+polr_test_binary_table_prop <- t(apply(polr_test_binary_table, 1, function(i) i / colSums(polr_test_binary_table)))
+
+Heatmap(polr_test_binary_table_prop, 
+        col = colorRamp2(c(0, 1), c("white", "red")),
+        name = "Proportion",
+        cluster_rows = FALSE, cluster_columns = FALSE,
+        row_title = "Prediction (Binary)", row_names_side = "left",
+        column_title = "True Label (Binary)", column_names_side = "top", column_names_rot = 0,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.text(sprintf("%.2f", polr_test_binary_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+        })
+
+```
+
