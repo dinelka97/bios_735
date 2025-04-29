@@ -1,6 +1,6 @@
 ---
 title: "Final Report - At the Heart of the Matter"
-output: html_document
+output: pdf_document
 ---
 
 Instructions: 
@@ -111,16 +111,16 @@ All specialized methods should leverage R package (should be loaded first)
 For categorical variables, we applied one-hot encoding to convert each category into a separate binary indicator variable. After this transformation, the full model included a total of 20 predictor variables. To address potential overfitting and improve model parsimony, we employed stepwise selection based on the Akaike Information Criterion (AIC). This approach iteratively added or removed predictors to identify a subset of variables that provided the best balance between model fit and complexity, ultimately selecting a more streamlined and interpretable model for subsequent analysis.
 
 ## 2 (ii) Logistic Regression Model
-Logistic regression is a widely used statistical model for predicting a binary outcome based on a set of predictor variables. The model assumes that the log-odds of the probability of the outcome is a linear function of the predictors. Specifically, if $Y$ is a binary outcome taking values in $ \{0,1\} $ and $ \mathbf{x} $ is a vector of covariates, then the logistic regression model is given by:
+Logistic regression is a widely used statistical model for predicting a binary outcome based on a set of predictor variables. The model assumes that the log-odds of the probability of the outcome is a linear function of the predictors. Specifically, if $Y$ is a binary outcome taking values in $\{0,1\}$ and $\mathbf{x}$ is a vector of covariates, then the logistic regression model is given by:
 $$
 \log\left( \frac{\Pr(Y=1|\mathbf{x})}{\Pr(Y=0|\mathbf{x})} \right) = \mathbf{x}^\top \boldsymbol\beta
 $$
-where $ \boldsymbol\beta $ is the vector of regression coefficients to be estimated. The corresponding probability model is:
+where $\boldsymbol\beta$ is the vector of regression coefficients to be estimated. The corresponding probability model is:
 $$
 \Pr(Y=1|\mathbf{x}) = \frac{1}{1+\exp(-\mathbf{x}^\top \boldsymbol\beta)}
 $$
 
-To estimate the coefficients $ \boldsymbol\beta $, maximum likelihood estimation is employed. The likelihood function for a sample of size $n$ is:
+To estimate the coefficients $\boldsymbol\beta$, maximum likelihood estimation is employed. The likelihood function for a sample of size $n$ is:
 $$
 L(\boldsymbol\beta) = \prod_{i=1}^n \left( \frac{1}{1+\exp(-\mathbf{x}_i^\top \boldsymbol\beta)} \right)^{y_i} \left( \frac{\exp(-\mathbf{x}_i^\top \boldsymbol\beta)}{1+\exp(-\mathbf{x}_i^\top \boldsymbol\beta)} \right)^{1-y_i}
 $$
@@ -129,24 +129,24 @@ $$
 \ell(\boldsymbol\beta) = \sum_{i=1}^n \left( y_i \mathbf{x}_i^\top \boldsymbol\beta - \log\left(1+\exp(\mathbf{x}_i^\top \boldsymbol\beta)\right) \right)
 $$
 
-Because there is no closed-form solution for $ \boldsymbol\beta $ that maximizes the log-likelihood, iterative numerical methods must be used. One of the most common algorithms for this purpose is the Newton-Raphson method.
+Because there is no closed-form solution for $\boldsymbol\beta$ that maximizes the log-likelihood, iterative numerical methods must be used. One of the most common algorithms for this purpose is the Newton-Raphson method.
 
-The Newton-Raphson method is a second-order optimization technique that updates the parameter estimates iteratively. At each iteration $k$, given a current estimate $ \boldsymbol\beta^{(k)} $, the next estimate $ \boldsymbol\beta^{(k+1)} $ is obtained by:
+The Newton-Raphson method is a second-order optimization technique that updates the parameter estimates iteratively. At each iteration $k$, given a current estimate $\boldsymbol\beta^{(k)}$, the next estimate $\boldsymbol\beta^{(k+1)}$ is obtained by:
 $$
 \boldsymbol\beta^{(k+1)} = \boldsymbol\beta^{(k)} - \left( \nabla^2 \ell(\boldsymbol\beta^{(k)}) \right)^{-1} \nabla \ell(\boldsymbol\beta^{(k)})
 $$
-where $ \nabla \ell(\boldsymbol\beta^{(k)}) $ is the gradient (score function) and $ \nabla^2 \ell(\boldsymbol\beta^{(k)}) $ is the Hessian matrix (second derivative of the log-likelihood).
+where $\nabla \ell(\boldsymbol\beta^{(k)})$ is the gradient (score function) and $\nabla^2 \ell(\boldsymbol\beta^{(k)})$ is the Hessian matrix (second derivative of the log-likelihood).
 
 In logistic regression, the gradient and Hessian have specific forms. The gradient is:
 $$
 \nabla \ell(\boldsymbol\beta) = \sum_{i=1}^n (y_i - \pi_i) \mathbf{x}_i
 $$
-where $ \pi_i = \Pr(Y=1|\mathbf{x}_i) $, and the Hessian is:
+where $\pi_i = \Pr(Y=1|\mathbf{x}_i)$, and the Hessian is:
 $$
 \nabla^2 \ell(\boldsymbol\beta) = -\sum_{i=1}^n \pi_i (1-\pi_i) \mathbf{x}_i \mathbf{x}_i^\top
 $$
 
-Thus, each Newton-Raphson update involves solving a linear system based on the weighted sum of the covariates. The iterations continue until convergence, usually when the change in $ \boldsymbol\beta $ is smaller than a pre-specified tolerance.
+Thus, each Newton-Raphson update involves solving a linear system based on the weighted sum of the covariates. The iterations continue until convergence, usually when the change in $\boldsymbol\beta$ is smaller than a pre-specified tolerance.
 
 In our model, we set the initial $\boldsymbol\beta$ as 0, tolerance as $10^{-3}$ and iterative times as $10^3$.
 
@@ -165,7 +165,7 @@ To estimate our parameters from this model, we use the BFGS algorithm. This is l
 
 ### Estimation: using BFGS to estimate POLR parameters
 
-The BFGS algorithm requires the use of the objective (log-likelihood) function and the first derivative of it to go about the optimization process. As the user, we do not need to input second derivatives but the method will approximate the Hessian matrix. Our initial plan was to use Newton Raphson (NR) instead, but the complexity of the 2nd derivative (Hessian) prompted us to use BFGS instead. The updating equation for BFGS can be written out as follows (assuming \alpha refers to the parameter space):
+The BFGS algorithm requires the use of the objective (log-likelihood) function and the first derivative of it to go about the optimization process. As the user, we do not need to input second derivatives but the method will approximate the Hessian matrix. Our initial plan was to use Newton Raphson (NR) instead, but the complexity of the 2nd derivative (Hessian) prompted us to use BFGS instead. The updating equation for BFGS can be written out as follows (assuming $\alpha$ refers to the parameter space):
 
 $$\alpha^{(t+1)} = \alpha^{(t)} - (M^{(t)})^{-1}f^{'}(\alpha)$$
 
@@ -405,8 +405,8 @@ Heatmap(polr_test_table_prop,
 
 
 ```{r side-by-side, fig.show='hold', out.width='45%', echo = F, fig.cap='Figure: Heatmap of the Training Data Performance (Left) and Testing Data Performance (Right) ', include = F}
-knitr::include_graphics("/Users/annikacleven/heart_disease/bios_735/results/figures/polr_train_full_heatmap.png")
-knitr::include_graphics("/Users/annikacleven/heart_disease/bios_735/results/figures/polr_test_full_heatmap.png")
+knitr::include_graphics("results/figures/polr_train_full_heatmap.png")
+knitr::include_graphics("results/figures/polr_test_full_heatmap.png")
 ```
 
 From our fitted model, we can see that the model does relatively well at predicting the participants with no heart disease. In the training dataset we accurately predict 91% of the no heart disease participants.In the testing dataset, we see that we accurately predict 86% of the no heart disease participants. 
