@@ -62,7 +62,7 @@ fit_rf <- function(x, y,
 				fit <- ordfor(depvar = "Class", 
 							  data = df_fold, 
 							  nsets = nsets, 
-							  perffunction = "probability", 
+							  perffunction = ifelse(nlevels(df$Class) > 2, "probability", "equal"),  
 							  ntreeperdiv = ntree_grid[i_ntree], 
 							  ntreefinal = 50 * ntree_grid[i_ntree], 
 							  min.node.size = nodesize_grid[i_nodesize])
@@ -90,11 +90,12 @@ fit_rf <- function(x, y,
 	}
 	
 	message("Fitting final model...")
-	fit <- ordfor(depvar = "Class",
+	fit <- ordfor(depvar = "Class", 
 				  data = df[, -which(names(df) == "foldid")],
-				  perffunction = "probability",
+				  perffunction = ifelse(nlevels(df$Class) > 2, "probability", "equal"), 
+				  importance = ifelse(nlevels(df$Class) > 2, "rps", "accuracy"), 
 				  ntreeperdiv = ntree_grid[best_ntree_nodesize[1]],
-				  ntreefinal = ntree_grid[best_ntree_nodesize[1]],
+				  ntreefinal = 50 * ntree_grid[best_ntree_nodesize[1]],
 				  min.node.size = nodesize_grid[best_ntree_nodesize[2]])
 	
 	return(list("fit" = fit, 
