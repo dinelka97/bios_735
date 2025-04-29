@@ -279,7 +279,8 @@ Proper and clear descriptions of results based on figures and tables
 Code/output is fine in document, but excessive and repetitive code/output should be avoided
 
 ## 3 (i) Logistic Regression Model
-This code output presents the variables after stepwise AIC selection, and their estimated coefficients from the logistic regression model with Newton Raphson method. It shows major vessels involved was strongly associated with the outcome, especially when two vessels were involved (ca2, coefficient = 3.183). The other major contribution to heart disease is being male (Sex = 1), which increased the log-odds by 1.398.
+
+The table presents the variables after stepwise AIC selection, and their estimated coefficients from the logistic regression model with Newton Raphson method. It shows major vessels involved was strongly associated with the outcome, especially when two vessels were involved (ca2, coefficient = 3.183). The other major contribution to heart disease is being male (Sex = 1), which increased the log-odds by 1.398.
 
 ```{r hidden-code, echo=FALSE}
 train <- read.csv("data/derived/df_v1_TRAIN.csv")
@@ -306,8 +307,8 @@ test %<>%
 lr_formula_full = y_bin ~ age+sex+cp+trestbps+chol+fbs+restecg+thalach+exang+oldpeak+slope+ca+thal
 pop_lr_fit = glm(lr_formula_full, data = train, family = binomial())
 stepwise_mod <- stepAIC(pop_lr_fit, direction = "both", trace = FALSE)
-summary(stepwise_mod)
 # Logistic model + Newton Raphson
+# Training set
 lr_formula = y_bin ~ sex+cp+trestbps+thalach+oldpeak+slope+ca+thal
 lr_fit = glm_v2(lr_formula, df = train, method = "lr")
 ## train matrix
@@ -323,7 +324,32 @@ lr_pred_train <- ifelse(lr_p_train >= 0.5, 1, 0)
 lr_conf_train <- table("Prediction" = lr_pred_train, "True Label" = lr_train_y) |> as.matrix()
 ## Normalize (row-wise proportion: prediction rows)
 lr_conf_train_prop <- t(apply(lr_conf_train, 1, function(i) i / colSums(lr_conf_train)))
+## Calculate kappa
+lr_train_kappa <- cohen.kappa(lr_conf_train)
+paste0("Weighted Cohen's Kappa for Training set is:", round(lr_train_kappa$weighted.kappa,2))
+
+# Testing set
+## test matrix
+lr_test_x <- model.matrix(lr_formula, data = test)
+colnames(lr_test_x)[colnames(lr_test_x) == "(Intercept)"] <- "Intercept"
+lr_test_x <- lr_test_x[, names(lr_fit$beta)]
+lr_test_y <- test[,ncol(test)]
+## predict probabilities
+lr_eta_test <- lr_test_x %*% lr_fit$beta
+lr_p_test <- 1 / (1 + exp(-lr_eta_test))
+lr_pred_test <- ifelse(lr_p_test >= 0.5, 1, 0) 
+## Confusion matrix
+lr_conf_test <- table("Prediction" = lr_pred_test, "True Label" = lr_test_y) |> as.matrix()
+## Normalize (row-wise proportion: prediction rows)
+lr_conf_test_prop <- t(apply(lr_conf_test, 1, function(i) i / colSums(lr_conf_test)))
+## Calculate kappa
+lr_test_kappa <- cohen.kappa(lr_conf_test)
+paste0("Weighted Cohen's Kappa for Testing set is:", round(lr_test_kappa$weighted.kappa,2))
 ```
+```{r include-image, fig.cap="Caption for the image", out.width="50%"}
+knitr::include_graphics("results/figures/stepwise_lr_coefs.jpg")
+```
+To assess and compare the classification performance of different models, we calculated Cohen’s kappa statistic. Kappa measures the agreement between predicted and true class labels while adjusting for agreement expected by chance. A kappa value of 1 indicates perfect agreement, while a value near 0 suggests agreement no better than random guessing. The weighted Cohen's Kappa for training and testing set of Logistics regression model is 0.73 and 0.64, indicating good predictive performance.
 
 The heatmaps below illustrate the model performance on both the training and testing datasets, evaluating how well the model generalizes to unseen data and identify any potential overfitting or underfitting issues. Consistency between the two heatmaps indicates stable model performance.
 
