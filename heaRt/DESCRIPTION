@@ -1,0 +1,17 @@
+Package: heaRt
+Title: Heart Disease Classification Procedures
+Version: 0.0.0.9000
+Authors@R: c(person("Tyler", "Humpherys", role=c("aut","cre"), email="tylerben@unc.edu"),
+             person("Matthew", "Sutcliffe", role=c("aut"), email="mds5@email.unc.edu"),
+             person("Yajie", "He", role=c("aut"), email="yajie@unc.edu"),
+             person("Annika", "Cleven", role=c("aut"), email="arcleven@unc.edu"),
+             person("Dinelka", "Nanayakkra", role=c("aut"), email="dinelka@unc.edu"))
+Description: This package contains multiple procedures to fit models that classify heart disease in patients.
+License: GPL-3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports: dplyr, readr, optimx, MASS, glue, magrittr
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
