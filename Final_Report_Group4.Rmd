@@ -1,6 +1,6 @@
 ---
 title: "Final Report - At the Heart of the Matter"
-output: pdf_document
+output: html_document
 ---
 
 Instructions: 
@@ -12,16 +12,74 @@ R package and Rmd details:
 R package and Rmd file should be runnable by instructors (unless data has privacy restrictions, in which case we can arrange an exception). Analyses are contained in Rmd file itself and should not reside in the R package.  The R package will be turned in separately as part of your group repository, and your Rmd file should utilize the R package. Your Rmd should start by loading your package. You can point out where to download data, you don’t necessarily need to contain in a data/ directory in the package, especially if it very large. The R package should have man pages for any functions that are exported. The R package should pass build/check as shown in class (ask if you have questions about this).
 
 ```{r}
+library(devtools)
+library(knitr)
+
 # load R package
 load_all("heaRt")
 ```
 
-# Introduction
+# 1 Introduction
 Clear background on problem to be addressed given
 Question(s) to be explored, discussed, and learned
 Brief description of data/characteristics, how it relates to addressing question(s)
 
-# Methods
+## 1 (i) Background
+Heart disease is a leading cause of death in the United States, accounting for over 700,000 deaths each year and posing a significant healthcare burden [1]. Accurate and early detection of heart disease is essential for improving patient outcomes, with implications for treatment plans, medication strategies, and lifestyle modifications. Traditional diagnostic methods, such as stress testing and electrocardiography (ECG), provide detailed, valuable insights of possible signals for the presence of heart disease. Thus, integrating this data together can enhance heart disease identification. The objective of our project is to develop a data-driven approach to predict the presence or severity of heart disease.
+
+## 1 (ii) Data
+To accomplish this objective, we will analyze a publicly available dataset collected by the Cleveland Clinic between 1981 and 1984. This dataset includes 303 patients with or without heart disease, and includes a variety of their demographic features (e.g. age and sex) and clinical features (e.g. resting blood pressure, serum cholesterol, chest pain, and response to exercise) on which to train a predictive model. Specifically, the heart disease outcome of interest is a categorical value with 0 being no heart disease and 1 to 4 being increasing heart disease severity. In our analysis we will use both the full outcome spectrum (0-4) and a simplified, binary outcome of 0 (no heart disease) and 1 (heart disease, any severity). The link to the dataset repository is found here: https://doi.org/10.24432/C52P4X. In addition to the age and sex demographic variables, the table below provides more information on the clinical variables available in the dataset.
+
+```{r, echo=FALSE}
+var_table <- data.frame(
+  Variable = c("cp", "trestbps", "chol", "fbs", "restecg", "thalach", 
+               "exang", "oldpeak", "slope", "ca", "thal"),
+  Name = c(
+    "Chest Pain Type", 
+    "Resting BP", 
+    "Serum Cholesterol", 
+    "Fasting Blood Sugar > 120 mg/dl", 
+    "Resting ECG Results", 
+    "Max Heart Rate Achieved", 
+    "Exercise Induced Angina", 
+    "ST Depression Induced by Exercise", 
+    "Peak Exercise ST Segment Slope", 
+    "Number of Major Vessels Colored by Fluoroscopy", 
+    "Thallium Stress Test Result"
+  ),
+  Type = c(
+    "Categorical", 
+    "Integer", 
+    "Integer", 
+    "Categorical", 
+    "Categorical", 
+    "Integer", 
+    "Categorical", 
+    "Integer", 
+    "Categorical", 
+    "Integer", 
+    "Categorical"
+  ),
+  Explanation = c(
+    "Typical angina, atypical angina, non-anginal pain, or asymptomatic",
+    "In mm Hg on admission to the hospital",
+    "Elevation associated with heart disease",
+    "1 = true; 0 = false. Elevation is associated with heart disease",
+    "Normal, having ST-T wave abnormality, or showing probable/definite left ventricular hypertrophy by Estes' criteria",
+    "During exercise",
+    "1 = yes; 0 = no",
+    "Commonly presents in ischemia. The deeper and earlier the depression during exercise, the higher the likelihood of obstructive coronary disease",
+    "Upsloping, flat, or downsloping. Flat or downsloping ST segments more often associated with coronary artery disease",
+    "Appearing to contain calcium deposits; marker of atherosclerosis and higher CAD disease",
+    "3 = normal; 6 = fixed defect (scar tissue from prior heart attacks); 7 = reversible defect (impaired blood flow during stress, normal at rest). Radioactive tracer shows blood flow in heart muscle"
+  )
+)
+
+
+kable(var_table, caption = "Clinical variables available in the dataset.")
+```
+
+# 2 Methods
 Explanation of key data preprocessing/wrangling steps (if any) + rationale
 Clear description of Module 2 likelihood based methods used, with the following
 	Likelihood/objective function
@@ -33,9 +91,11 @@ Discussion of Module 3 machine learning method used
 Metrics for performance comparison between proposed models 
 All specialized methods should leverage R package (should be loaded first)
 	Functions used from package should be briefly described
-## Data Preprocessing
+
+## 2 (i) Data Preprocessing
 For categorical variables, we applied one-hot encoding to convert each category into a separate binary indicator variable. After this transformation, the full model included a total of 20 predictor variables. To address potential overfitting and improve model parsimony, we employed stepwise selection based on the Akaike Information Criterion (AIC). This approach iteratively added or removed predictors to identify a subset of variables that provided the best balance between model fit and complexity, ultimately selecting a more streamlined and interpretable model for subsequent analysis.
-## Logistic Regression Model
+
+## 2 (ii) Logistic Regression Model
 Logistic regression is a widely used statistical model for predicting a binary outcome based on a set of predictor variables. The model assumes that the log-odds of the probability of the outcome is a linear function of the predictors. Specifically, if $Y$ is a binary outcome taking values in $ \{0,1\} $ and $ \mathbf{x} $ is a vector of covariates, then the logistic regression model is given by:
 $$
 \log\left( \frac{\Pr(Y=1|\mathbf{x})}{\Pr(Y=0|\mathbf{x})} \right) = \mathbf{x}^\top \boldsymbol\beta
@@ -75,13 +135,13 @@ Thus, each Newton-Raphson update involves solving a linear system based on the w
 
 In our model, we set the initial $\boldsymbol\beta$ as 0, tolerance as $10^{-3}$ and iterative times as $10^3$.
 
-# Results
+# 3 Results
 Clear Figures/tables describing and summarizing key outcomes/variables
 Clear Figures/table illustrating results that directly addresses question(s)
 Proper and clear descriptions of results based on figures and tables
 Code/output is fine in document, but excessive and repetitive code/output should be avoided
-## Logistic Regression Model
 
+## 3 (i) Logistic Regression Model
 This code output presents the variables after stepwise AIC selection, and their estimated coefficients from the logistic regression model with Newton Raphson method. It shows major vessels involved was strongly associated with the outcome, especially when two vessels were involved (ca2, coefficient = 3.183). The other major contribution to heart disease is being male (Sex = 1), which increased the log-odds by 1.398.
 
 ```{r hidden-code, echo=FALSE}
@@ -135,6 +195,15 @@ knitr::include_graphics("results/figures/lr_test_heatmap.png")
 knitr::include_graphics("results/figures/lr_train_heatmap.png")
 ```
 
-# Discussion/Conclusion
+## 3 (ii) Proportional Odds Model 
+
+
+## 3 (iii) Random Forest Model
+
+
+# 4 Discussion/Conclusion
 Summarization of main points, conclusions based in results
 Discussion of limitations if any
+
+# References
+[1] Martin, SS., … American Heart Association Council on Epidemiology and Prevention Statistics Committee and Stroke Statistics Subcommittee (2024). 2024 Heart Disease and Stroke Statistics: A Report of US and Global Data From the American Heart Association. Circulation, 149(8), e347–e913. https://doi.org/10.1161/CIR.0000000000001209
