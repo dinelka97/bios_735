@@ -3,6 +3,7 @@
 export(glm_v2)
 import(magrittr)
 importFrom(MASS,polr)
+importFrom(dplyr,mutate)
 importFrom(dplyr,select)
 importFrom(glue,glue)
 importFrom(optimx,optimx)

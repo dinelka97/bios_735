@@ -30,6 +30,7 @@
 #' }
 #'
 #' @importFrom dplyr select
+#' @importFrom dplyr mutate
 #' @importFrom readr read_csv
 #' @importFrom optimx optimx
 #' @importFrom MASS polr
