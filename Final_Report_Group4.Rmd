@@ -23,6 +23,10 @@ library(circlize)
 library(grid)
 library(MASS)
 library(ggplot2)
+library(ordinalForest) |> suppressPackageStartupMessages()
+library(parallel) |> suppressPackageStartupMessages()
+library(viridis) |> suppressPackageStartupMessages()
+source("code/fit_rf_func.R")
 ```
 
 ```{r}
@@ -256,6 +260,17 @@ As a step further to what was laid out above, we also looked into model performa
 One last procedure that was conducted in our analysis was that of model selection using AIC. In comparison to forward/backward selection which proceeds only in one direction, stepwise AIC looks to iteratively add and subtract predictors to find the model with the lowest Akaike Information Criterion (AIC). AIC penalizes for having too many covariates in the model, and therefore provides a more unbiased justification towards model selection compared to metrics such as $R^2$ or Adjusted $R^2$. 
 
 We derived a heatmap (with a confusion matrix) and computed the misclassification distance after selecting the best model using AIC.
+
+## 2 (iv) Ordinal Random Forest
+We used an ordinal random forest model to predict heart disease status based on a variety of clinical and demographic predictors. This method is designed specifically for ordinal outcomes—where the response variable has a natural ordering but unknown spacing between classes. The outcome variable has five ordered levels (0–4), where 0 indicates no heart disease and higher values indicate heart disease of increasing severity.
+
+The model was implemented using the `ordinalForest` R package. This package works by assigning a numeric score to each class level. These scores are predicted using random forests and then mapped back to the class labels. This makes the model functionally similar to regression approaches, while still handling classification tasks with ordered outcomes.
+
+We pre-processed our dataset by formatting the predictors (x) and outcomes (y) according to the expectations of the `fit_rf` function from our package. We used both the original five-level outcome and a simplified binary outcome (0 = no heart disease, 1+ = heart disease of any level) to evaluate model performance under different class definitions. We split our data into a training set (80% of samples) and a test set (20% of samples) and ran all model fitting on the training data.
+
+### Hyperparameter tuning
+
+Hyperparameter tuning was conducted using 5-fold cross-validation to minimize the mean absolute error (MAE) between the predicted score and the true class label. We considered two of the hyperparameters for tuning: (1) the minimum node size, indicating the smallest number of observations allowed in a terminal node, and (2) the minimum number of decision trees trained. We tested combinations of minimum node size (ranging from 2 to 32) and minimum number of trees (ranging from 10 to 1000). The combination with the minimum average MAE across the 5-folds was selected for final model training using the entire training dataset.
 
 # 3 Results
 Clear Figures/tables describing and summarizing key outcomes/variables
@@ -573,8 +588,204 @@ as.data.frame(polr_test_table_step) %>%
 
 Overall, the proportional odds model had an overall poor performance, both using the full model and a nested model determined through stepwise AIC selection.  
 
-## 3 (iii) Random Forest Model
+## 3 (iii) Ordinal Random Forest Model
+Data loading and formatting
+```{r}
+train <- read.csv("./data/derived/df_v1_TRAIN.csv")
+test <- read.csv("./data/derived/df_v1_TEST.csv")
+## build the train dataset
+train %<>%
+	dplyr::select(-X) %>%
+	dplyr::mutate(y_mult = factor(num),
+				  y_bin = factor(ifelse(num == "0", 0, 1)),
+				  dplyr::across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+	) %>% 
+	dplyr::select(-num)
 
+## build the test dataset
+test %<>%
+	dplyr::select(-X) %>%
+	dplyr::mutate(y_mult = factor(num),
+				  y_bin = factor(ifelse(num == "0", 0, 1)),
+				  dplyr::across(c(sex,cp, fbs, restecg, exang, slope, ca, thal), as.factor)
+	) %>% 
+	dplyr::select(-num)
+
+# separate into predictors and outcomes
+x_train <- train[, -which(names(train) %in% c("y_mult", "y_bin"))]
+y_train_mult <- train$y_mult
+y_train_bin <- train$y_bin
+
+# separate into predictors and outcomes
+x_test <- test[, -which(names(test) %in% c("y_mult", "y_bin"))]
+y_test_mult <- test$y_mult
+y_test_bin <- test$y_bin
+
+# Metadata has descriptions of the variables
+meta <- read.csv(file = "./data/derived/var_info_upd.csv")
+meta$name_plot <- c("age", "sex", "chest pain", "resting BP", "serum cholesterol", "fasting blood sugar", "resting ECG", "max HR", "exercise-induced angina", "ST depression", "slope peak exercise ST segment", "number of major vessels", "thalassemia type", "heart disease output")
+
+# default values
+ntree_grid <- c(10, 50, 100, 500, 1000)
+nodesize_grid <- c(2, 3, 4, 6, 8, 12, 16, 24, 32)
+```
+
+We fit the ordinal random forest model using the `fit_rf` function.
+```{r, eval=FALSE}
+# Fit ordinal model
+# Takes a while
+# res_multi <- fit_rf(x_train, y_train_mult)
+```
+
+```{r, eval=TRUE, echo=FALSE}
+# The random forest model takes a long time to run, so we saved the results and load them here.
+load("./results/randomforest_results.RData")
+```
+
+### Hyperparameter tuning
+
+We first examined the results of the hyperparameter tuning.
+```{r, fig.align='center', fig.width=5, fig.height=4}
+Heatmap(res_multi$mean_mae, col = rev(viridis(n = 100)), 
+		cluster_rows = FALSE, 
+		cluster_columns = FALSE, 
+		name = "MAE", 
+		row_title = "min. number of trees/set", 
+		row_labels = c(10, 50, 100, 500, 1000), 
+		row_names_side = "left", 
+		column_title = "min. node size", 
+		column_labels = c(2, 3, 4, 6, 8, 12, 16, 24, 32), 
+		column_names_side = "top")
+
+```
+
+Cross-validation revealed the lowest mean absolute error (MAE) when using 500 trees and a minimum node size of 32. Notably, the optimal minimum node size was the largest value we considered given that this reflects >10% of the training dataset size. This may reflect the general difficulty in predicting an ordinal outcome with imbalanced classes.
+
+### Predicting ordinal outcome measurement (0, 1, 2, 3, 4)
+```{r, fig.align='center', fig.show="hold", fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+df_multi_train <- cbind(x_train, y_train_mult) |> as.data.frame()
+names(df_multi_train)[ncol(df_multi_train)] <- "Class"
+pred_multi_train <- predict(object = res_multi$fit, newdata = df_multi_train)
+
+pred_multi_train_table <- table("prediction" = pred_multi_train$ypred, "true label" = df_multi_train$Class) |> as.matrix()
+pred_multi_train_table_prop <- t(apply(X = pred_multi_train_table, MARGIN = 1, FUN = function(i) i / colSums(pred_multi_train_table)))
+
+# Heatmap of confusion matrix for TRAINING data with all classes
+hm_train <- Heatmap(pred_multi_train_table_prop, 
+		col = colorRamp2(breaks = c(0, 1), colors = c("white", "red")), 
+		name = "proportion", 
+		cluster_rows = FALSE, cluster_columns = FALSE, 
+		row_title = "prediction", row_names_side = "left", 
+		column_title = "TRAINING set - true label", column_names_side = "top", column_names_rot = 0, 
+		cell_fun = function(j, i, x, y, width, height, fill) {
+			grid.text(sprintf("%.2f", pred_multi_train_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+		})
+
+df_multi_test <- cbind(x_test, y_test_mult) |> as.data.frame()
+names(df_multi_test)[ncol(df_multi_test)] <- "Class"
+pred_multi_test <- predict(object = res_multi$fit, newdata = df_multi_test)
+
+pred_multi_test_table <- table("prediction" = pred_multi_test$ypred, "true label" = df_multi_test$Class) |> as.matrix()
+pred_multi_test_table_prop <- t(apply(X = pred_multi_test_table, MARGIN = 1, FUN = function(i) i / colSums(pred_multi_test_table)))
+
+# Heatmap of confusion matrix for TEST data with all classes
+hm_test <- Heatmap(pred_multi_test_table_prop, 
+		col = colorRamp2(breaks = c(0, 1), colors = c("white", "red")), 
+		name = "proportion", 
+		cluster_rows = FALSE, cluster_columns = FALSE, 
+		row_title = "prediction", row_names_side = "left", 
+		column_title = "TEST set - true label", column_names_side = "top", column_names_rot = 0, 
+		cell_fun = function(j, i, x, y, width, height, fill) {
+			grid.text(sprintf("%.2f", pred_multi_test_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+		})
+
+draw(hm_train + hm_test, ht_gap = unit(2, "cm")) |> suppressWarnings()
+```
+
+The random forest model overall performs poorly at predicting heart disease cases. On the training set, we observed a correct prediction of no heart disease for 99% of no heart disease cases, but much lower accuracy for heart disease levels 1 - 4. Similarly, on the test set, while we correctly predict 97% of the no heart disease cases, we underpredict for the vast majority of the positive heart disease cases.
+
+Weighted kappa
+```{r, echo=FALSE, results="hold"}
+train_kappa <- psych::cohen.kappa(cbind(y_train_mult, pred_multi_train$ypred))$weighted.kappa
+test_kappa <- psych::cohen.kappa(cbind(y_test_mult, pred_multi_test$ypred))$weighted.kappa
+
+message("Weighted Cohen's Kappa")
+message(paste("Training set: \t", round(train_kappa, 3)))
+message(paste("Test set: \t", round(test_kappa, 3)))
+```
+
+### Predicting binary outcome measurement (0, 1+)
+
+Given the poor performance on the ordinal outcome, we re-framed the problem as a binary classification: no heart disease (0) versus any heart disease (1+). This framing produced a much more balanced class distribution and significantly improved performance.
+
+We fit the ordinal random forest model using the `fit_rf` function.
+```{r, eval=FALSE}
+# Fit ordinal model but instead let's classify into the binary output (0, 1+)
+# Takes a while
+res_binary <- fit_rf(x_train, y_train_bin)
+```
+
+```{r, fig.align='center', fig.show="hold", fig.width=6, fig.height=3}
+df_binary_train <- cbind(x_train, y_train_bin) |> as.data.frame()
+names(df_binary_train)[ncol(df_binary_train)] <- "Class"
+pred_binary_train <- predict(object = res_binary$fit, newdata = df_binary_train)
+
+pred_binary_train_table <- table("prediction" = pred_binary_train$ypred, "true label" = df_binary_train$Class) |> as.matrix()
+pred_binary_train_table_prop <- t(apply(X = pred_binary_train_table, MARGIN = 1, FUN = function(i) i / colSums(pred_binary_train_table)))
+
+# Heatmap of confusion matrix for TRAINING data with binary outcome
+hm_train <- Heatmap(pred_binary_train_table_prop, 
+		col = colorRamp2(breaks = c(0, 1), colors = c("white", "red")), 
+		name = "proportion", 
+		cluster_rows = FALSE, cluster_columns = FALSE, 
+		row_title = "prediction", row_names_side = "left", 
+		column_title = "true label", column_names_side = "top", column_names_rot = 0, 
+		cell_fun = function(j, i, x, y, width, height, fill) {
+			grid.text(sprintf("%.2f", pred_binary_train_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+		})
+
+df_binary_test <- cbind(x_test, y_test_bin) |> as.data.frame()
+names(df_binary_test)[ncol(df_binary_test)] <- "Class"
+pred_binary_test <- predict(object = res_binary$fit, newdata = df_binary_test)
+
+pred_binary_test_table <- table("prediction" = pred_binary_test$ypred, "true label" = df_binary_test$Class) |> as.matrix()
+pred_binary_test_table_prop <- t(apply(X = pred_binary_test_table, MARGIN = 1, FUN = function(i) i / colSums(pred_binary_test_table)))
+
+# Heatmap of confusion matrix for TEST data with binary outcome
+hm_test <- Heatmap(pred_binary_test_table_prop, 
+		col = colorRamp2(breaks = c(0, 1), colors = c("white", "red")), 
+		name = "proportion", 
+		cluster_rows = FALSE, cluster_columns = FALSE, 
+		row_title = "prediction", row_names_side = "left", 
+		column_title = "true label", column_names_side = "top", column_names_rot = 0, 
+		cell_fun = function(j, i, x, y, width, height, fill) {
+			grid.text(sprintf("%.2f", pred_binary_test_table_prop[i, j]), x, y, gp = gpar(fontsize = 10))
+		})
+
+draw(hm_train + hm_test, ht_gap = unit(2, "cm")) |> suppressWarnings()
+```
+
+Confusion matrices demonstrated strong performance on both training and test data. The model was able to distinguish between healthy individuals and those with heart disease with high reliability. These results suggest that predicting the presence of heart disease is a relatively easy task, while predicting the severity of heart disease is much more challenging.
+
+Weighted kappa
+```{r, echo=FALSE, results="hold"}
+train_kappa <- psych::cohen.kappa(cbind(y_train_bin, pred_binary_train$ypred))$weighted.kappa
+test_kappa <- psych::cohen.kappa(cbind(y_test_bin, pred_binary_test$ypred))$weighted.kappa
+
+message("Weighted Cohen's Kappa")
+message(paste("Training set: \t", round(train_kappa, 3)))
+message(paste("Test set: \t", round(test_kappa, 3)))
+```
+
+### Variable importance
+
+```{r, fig.align='center', fig.height=6, fig.width = 8}
+par(mar = c(4, 14, 1, 1))
+barplot(sort(res_binary$fit$varimp), 
+		horiz = TRUE, las = 1, 
+		names.arg = meta$name_plot[match(x = names(sort(res_multi$fit$varimp)), table = meta$name)], xlab = "variable importance")
+```
 
 # 4 Discussion/Conclusion
 Summarization of main points, conclusions based in results
@@ -582,6 +793,10 @@ Discussion of limitations if any
 
 ## 4 (i) Sample Size Concerns and effect on Proportional Odds Model
 One reason for the proportional odds model is due to the limited sample size. At the higher heart severity levels like 3 and 4, the sample size within these groups was very small. This constrains the model's ability to learn the data in the training dataset and accurately predict participants into these higher categories. This also explains some of the model's bias towards 0, which was the largest disease severity group. Additionally, since the poor performance was also found in the model selected by AIC stepwise selection, we can contribute some of the errors of the model due to the imbalanced data. This is because even the best fitting model was not a great fit. In the future, we would advise our collaborators to aim for a larger sample size overall, but also within groups. We could also look into harmonizing the data across the many clinics investigating heart disease. 
+
+## 4 (ii) Ordinal Random Forest
+
+The ordinal random forest model successfully distinguished between individuals with and without heart disease when using a binary outcome, but failed to accurately predict multiple levels of disease severity. This limitation likely stems from a combination of class imbalance and a lack of differentiating features for disease severity.
 
 # References
 [1] Martin, SS., … American Heart Association Council on Epidemiology and Prevention Statistics Committee and Stroke Statistics Subcommittee (2024). 2024 Heart Disease and Stroke Statistics: A Report of US and Global Data From the American Heart Association. Circulation, 149(8), e347–e913. https://doi.org/10.1161/CIR.0000000000001209
