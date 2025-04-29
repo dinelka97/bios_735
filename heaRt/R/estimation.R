@@ -111,7 +111,14 @@ glm_v2 <- function(formula, df, method){
   if(method == "polr"){
     ## extract the theta names (based on the categories in the data)
     # vec = sort(pull(unique(y)))
-    vec = sort(as.vector(unique(y)[,1]))
+    # vec = sort(as.vector(unique(y)[,1]))
+    if (is.factor(y[[1]])) {
+      # if the response is a factor, get its levels directly
+      vec = levels(y[[1]])
+    } else {
+      # otherwise, extract the unique values safely
+      vec = sort(unique(as.vector(unlist(y))))
+    }
     theta_names = paste0("theta", vec[-length(vec)], vec[-1])
 
 
